@@ -40,6 +40,7 @@ class BeyondImporter extends Application {
      */
     hookActorList() {
         Hooks.on('renderActorList', (app, html, data) => {
+            console.log(game);
             const importButton = $('<button class="import-dndbeyond-list" style="min-width: 96%;"><span class="fas fa-file-import"></span> Beyond Import</button>');
 
             html.find('.import-dndbeyond-list').remove();
@@ -81,6 +82,8 @@ class BeyondImporter extends Application {
         out += '<li>Copy the data on this page into the box below.</li>';
         out += '</ol>';
         out += '<p><textarea class="ddb-data form-control" cols="30" rows="5" autofocus placeholder="Paste your character data here"></textarea></p>';
+
+        console.log(options.actor);
 
         const d = new Dialog({
             title: "D&D Beyond Character Import",
@@ -128,13 +131,13 @@ class BeyondImporter extends Application {
             return;
         }
 
-        if (data === null) {
+        if (data == null) {
             console.error('No character data provided');
             return;
         }
 
         // Create new actor (GM only) if entity is not pre-defined
-        if(opts.actor === null) {
+        if(opts.actor == null) {
             Actor5e.create({ name: data.character.name, type: 'character' }, true).then(actor => {
                 this.parseCharacterData(actor, data);
             });
@@ -150,28 +153,38 @@ class BeyondImporter extends Application {
      * @param {Object} data - Character JSON data string parsed as an object after import
      */
     parseCharacterData(actorEntity, data) {
+        console.log(data);
         let actor = Object.assign({}, actorEntity.data);
         let character = data.character;
         delete actor._id;
-        console.log(game);
-        console.log(data);
+
+        let items = [];
+
+        let features = this.getFeatures(character);
+        let classSpells = features.spells;
+        let biography = features.biography;
 
         actor.img = character.avatarUrl;
+        actor.name = character.name;
 
         // Set Details
-        actor.data.details.level.value = character.classes.reduce((total, charClass) => total + charClass.level, 0);
+        actor.data.details.level.value = features.level;
         actor.data.details.race.value = character.race.fullName;
         actor.data.details.alignment.value = this._getConfig('alignments', 'id', character.alignmentId).long;
         actor.data.details.background.value = character.background.definition != null ? character.background.definition.name : (character.background.customBackground != null ? character.background.customBackground.name : '');
         actor.data.details.xp.value = character.currentXp.toString();
 
         // Set Attributes
-        actor.data.attributes.prof.value = Math.floor((actor.data.details.level.value + 7) / 4);
-        actor.data.attributes.hd.value = actor.data.details.level.value;
+        actor.data.attributes.prof.value = Math.floor((features.level + 7) / 4);
+        actor.data.attributes.hd.value = features.level;
         actor.data.attributes.hp.value = this.getHp(character).toString();
         actor.data.attributes.hp.max = this.getHp(character).toString();
         actor.data.attributes.spellcasting.value = '';
         actor.data.attributes.speed.value = this.getSpeeds(character);
+
+        let inv = this.getInventory(character, actorEntity, features);
+        items = items.concat(inv.items);
+        actor.data.attributes.ac.value = inv.ac;
 
         // Set Traits
         let senses = [];
@@ -218,16 +231,17 @@ class BeyondImporter extends Application {
                     description: { type: "String", label: "Description", value: "" },
                     levels: { type: "String", label: "Class Levels", value: charClass.level.toString() },
                     source: { type: "String", label: "Source" },
-                    subclass: { type: "String", label: "Subclass", value: charClass.subclassDefinition === null ? '' : charClass.subclassDefinition.name }
+                    subclass: { type: "String", label: "Subclass", value: charClass.subclassDefinition == null ? '' : charClass.subclassDefinition.name }
                 }
             };
 
-            if(actor.items.filter(it => it.name === item.name).length > 0) {
-                const it = actor.items.filter(it => it.name === item.name)[0];
-                actorEntity.updateOwnedItem(it, Object.assign(it, item));
-            } else {
-                actorEntity.createOwnedItem(item, true);
-            }
+            // if(actor.items.filter(it => it.name === item.name).length > 0) {
+            //     const it = actor.items.filter(it => it.name === item.name)[0];
+            //     actorEntity.updateOwnedItem(it, Object.assign(it, item));
+            // } else {
+            //     actorEntity.createOwnedItem(item, true);
+            // }
+            items = items.concat([item]);
 
             if (actor.data.attributes.spellcasting.value === '') {
                 if (charClass.spellCastingAbilityId != null) {
@@ -260,7 +274,7 @@ class BeyondImporter extends Application {
                 return total + bon;
             }, 0) + (prof ? actor.data.attributes.prof.value + (exp ? actor.data.attributes.prof.value : 0) : 0);
 
-            skill.value = prof ? 1 + (exp ? 1 : 0) : 0;
+            skill.value = (prof ? 1 + (exp ? 1 : 0) : 0);
             skill.mod = actor.data.abilities[skill.ability].mod + bonus;
 
             // passive perception
@@ -271,7 +285,12 @@ class BeyondImporter extends Application {
             actor.data.skills[skl] = skill;
         }
 
+        this.parseItems(actorEntity, items);
         actorEntity.update(actor, true);
+
+        setTimeout(() => {
+            actorEntity.update({['data.details.biography.value']: biography}, true);
+        }, 200);
     }
 
     /**
@@ -285,14 +304,14 @@ class BeyondImporter extends Application {
 
         // scan for modifiers except those in items, because we will get those bonuses from the items once they are imported
         // NOTE: this also handles the problem that Beyond includes modifiers from items that are not currently equipped/attuned
-        this._getObjects(character.modifiers, 'subType', 'hit-points-per-level', ['item']).forEach((bonus) => {
+        let hpLevelBonus = this._getObjects(character.modifiers, 'subType', 'hit-points-per-level', ['item']).forEach((bonus) => {
             let level = totalLevel;
 
             // Ensure that per-level bonuses from class features only apply for the levels of the class and not the character's total level.
             let charClasses = character.classes.filter((charClass) => {
-                let output = charClass.definition.classFeatures.findIndex(cF => cF.id === bonus.componentId) >= 0;
+                let output = charClass.definition.classFeatures.findIndex(cF => cF.id == bonus.componentId) >= 0;
                 if (charClass.subclassDefinition != null) {
-                    output = output || charClass.subclassDefinition.classFeatures.findIndex(cF => cF.id === bonus.componentId) >= 0;
+                    output = output || charClass.subclassDefinition.classFeatures.findIndex(cF => cF.id == bonus.componentId) >= 0;
                 }
                 return output;
             });
@@ -317,7 +336,7 @@ class BeyondImporter extends Application {
      */
     getSpeeds(character) {
         let weightSpeeds = character.race.weightSpeeds;
-        if(weightSpeeds === null) {
+        if(weightSpeeds == null) {
             weightSpeeds = {
                 "normal": {
                     "walk": 30,
@@ -332,7 +351,7 @@ class BeyondImporter extends Application {
         let speedMods = this._getObjects(character.modifiers, 'subType', 'speed');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type === 'set') {
+                if(speedMod.type == 'set') {
                     weightSpeeds.normal.walk = (speedMod.value > weightSpeeds.normal.walk ? speedMod.value : weightSpeeds.normal.walk);
                 }
             });
@@ -341,8 +360,8 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'innate-speed-flying');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type === 'set' && speedMod.id.indexOf('spell') === -1) {
-                    if(speedMod.value === null) speedMod.value = weightSpeeds.normal.walk;
+                if(speedMod.type == 'set' && speedMod.id.indexOf('spell') == -1) {
+                    if(speedMod.value == null) speedMod.value = weightSpeeds.normal.walk;
                     weightSpeeds.normal.fly = (speedMod.value > weightSpeeds.normal.fly ? speedMod.value : weightSpeeds.normal.fly);
                 }
             });
@@ -351,8 +370,8 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'innate-speed-swimming');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type === 'set' && speedMod.id.indexOf('spell') === -1) {
-                    if(speedMod.value === null) speedMod.value = weightSpeeds.normal.walk;
+                if(speedMod.type == 'set' && speedMod.id.indexOf('spell') == -1) {
+                    if(speedMod.value == null) speedMod.value = weightSpeeds.normal.walk;
                     weightSpeeds.normal.swim = (speedMod.value > weightSpeeds.normal.swim ? speedMod.value : weightSpeeds.normal.swim);
                 }
             });
@@ -361,8 +380,8 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'innate-speed-climbing');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type === 'set' && speedMod.id.indexOf('spell') === -1) {
-                    if(speedMod.value === null) speedMod.value = weightSpeeds.normal.walk;
+                if(speedMod.type == 'set' && speedMod.id.indexOf('spell') == -1) {
+                    if(speedMod.value == null) speedMod.value = weightSpeeds.normal.walk;
                     weightSpeeds.normal.climb = (speedMod.value > weightSpeeds.normal.climb ? speedMod.value : weightSpeeds.normal.climb);
                 }
             });
@@ -371,7 +390,7 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'unarmored-movement');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type === 'bonus') {
+                if(speedMod.type == 'bonus') {
                     speedMod.value = isNaN(weightSpeeds.normal.walk + speedMod.value) ? 0 : speedMod.value;
                     weightSpeeds.normal.walk += speedMod.value;
                     if(weightSpeeds.normal.fly > 0) weightSpeeds.normal.fly += speedMod.value;
@@ -384,7 +403,7 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'speed');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type === 'bonus') {
+                if(speedMod.type == 'bonus') {
                     speedMod.value = isNaN(weightSpeeds.normal.walk + speedMod.value) ? 0 : speedMod.value;
                     weightSpeeds.normal.walk += speedMod.value;
                     if(weightSpeeds.normal.fly > 0) weightSpeeds.normal.fly += speedMod.value;
@@ -404,6 +423,609 @@ class BeyondImporter extends Application {
         return speed;
     }
 
+    getFeatures(character) {
+        let biography = '';
+        let classSpells = [];
+
+        // Background Feature
+        if(character.background.definition != null) {
+            let btrait = {
+                name: character.background.definition.featureName,
+                description: character.background.definition.featureDescription,
+                source: 'Background',
+                source_type: character.background.definition.name
+            }
+
+            biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+        }
+
+        // Custom Background Feature
+        if(character.background.customBackground != null) {
+            if(character.background.customBackground.featuresBackground != null) {
+                let btrait = {
+                    name: character.background.customBackground.featuresBackground.featureName,
+                    description: character.background.customBackground.featuresBackground.featureDescription,
+                    source: 'Background',
+                    source_type: character.background.customBackground.name
+                };
+
+                biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+            }
+        }
+
+        // Feats
+        character.feats.forEach((feat, fi) => {
+            let btrait = {
+                name: feat.definition.name,
+                description: feat.definition.description,
+                source: 'Feat',
+                source_type: feat.definition.name
+            };
+
+            biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+        });
+
+        // Race Features
+        if(character.race.racialTraits != null) {
+            let ti = 0;
+            character.race.racialTraits.forEach((trait) => {
+                if(['Languages', 'Darkvision', 'Superior Darkvision', 'Skills', 'Ability Score Increase', 'Feat', 'Age', 'Alignment', 'Size', 'Speed', 'Skill Versatility', 'Dwarven Combat Training', 'Keen Senses', 'Elf Weapon Training', 'Extra Language', 'Tool Proficiency'].indexOf(trait.definition.name) !== -1) {
+                    return;
+                }
+
+                let description = '';
+                if(trait.options != null) {
+                    trait.options.forEach((option) => {
+                        description += option.name + '\n';
+                        description += (option.description !== '') ? option.description + '\n\n' : '\n';
+                    });
+                }
+
+                description += trait.definition.description;
+
+                let btrait = {
+                    name: trait.definition.name,
+                    description: description,
+                    source: 'Race',
+                    source_type: character.race.fullName
+                };
+
+                biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+
+                let spells = this.getFeatureSpells(character, trait.id, 'race');
+                spells.forEach((spell) => {
+                    spell.spellCastingAbility = this._getConfig('abilities', 'id', spell.spellCastingAbilityId).short;
+                    classSpells.push(spell);
+                });
+
+                ti++;
+            });
+        }
+
+        // Handle (Multi)Class Features
+        let multiClassLevel = 0;
+        let multiClasses = [];
+        let totalLevel = 0;
+        let monkLevel = 0;
+        let jackOfAllTrades = false;
+        let criticalRange = 20;
+        character.classes.forEach((currentClass, i) => {
+            totalLevel += currentClass.level;
+
+            if(!currentClass.isStartingClass){
+                multiClasses.push({
+                    name: currentClass.definition.name,
+                    level: currentClass.level,
+                    subclass: currentClass.subclassDefinition == null ? '' : currentClass.subclassDefinition.name
+                });
+                multiClassLevel += currentClass.level;
+            }
+
+            // Set Pact Magic as class resource
+            if(currentClass.definition.name.toLowerCase() === 'warlock') {
+                // let attributes = {}
+                // attributes['other_resource_name'] = 'Pact Magic';
+                // attributes['other_resource_max'] = getPactMagicSlots(currentClass.level);
+                // attributes['other_resource'] = getPactMagicSlots(currentClass.level);
+                // Object.assign(single_attributes, attributes);
+            }
+
+            if(currentClass.definition.name === 'Monk') monkLevel = currentClass.level;
+
+            if(currentClass.definition.name.toLowerCase() === 'fighter' && currentClass.subclassDefinition != null) {
+                if(currentClass.subclassDefinition.name.toLowerCase() === 'champion') {
+                    currentClass.subclassDefinition.classFeatures.forEach((feature, i) => {
+                        if(feature.id === 215 && currentClass.level >= feature.requiredLevel) { // improved critical
+                            criticalRange = Math.min(19, criticalRange);
+                        }
+                        if(feature.id === 218 && currentClass.level >= feature.requiredLevel) {
+                            criticalRange = Math.min(18, criticalRange);
+                        }
+                    });
+                }
+            }
+
+            let ti = 0;
+            currentClass.definition.classFeatures.forEach((trait) => {
+                if(['Spellcasting', 'Divine Domain', 'Ability Score Improvement', 'Bonus Cantrip', 'Proficiencies', 'Hit Points', 'Arcane Tradition', 'Otherworldly Patron', 'Pact Magic', 'Expanded Spell List', 'Ranger Archetype', 'Druidic', 'Druid Circle', 'Sorcerous Origin', 'Monastic Tradition', 'Bardic College', 'Expertise', 'Roguish Archetype', 'Sacred Oath', 'Oath Spells', 'Martial Archetype'].indexOf(trait.name) !== -1) {
+                    return;
+                }
+                if(trait.requiredLevel > currentClass.level) return;
+
+                if(trait.name.includes('Jack')){
+                    jackOfAllTrades = true;
+                }
+
+                let description = '';
+
+                description += trait.description;
+
+                let btrait = {
+                    name: trait.name,
+                    description: description,
+                    source: 'Class',
+                    source_type: currentClass.definition.name
+                };
+
+                biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+
+                let spells = this.getFeatureSpells(character, trait.id, 'class');
+                spells.forEach((spell) => {
+                    spell.spellCastingAbility = this._getConfig('abilities', 'id', spell.spellCastingAbilityId);
+                    classSpells.push(spell);
+                });
+
+                if(trait.name === 'Metamagic') {
+                    character.choices.class.forEach((option) => {
+                        if(option.type === 3 && (option.optionValue >= 106 && option.optionValue <= 113)) {
+                            let item = this._getObjects(option.options, 'id', option.optionValue);
+
+                            if(item.length > 0) {
+                                item = item[0];
+                                let btrait = {
+                                    name: item.label,
+                                    description: item.description,
+                                    source: 'Class',
+                                    source_type: currentClass.definition.name
+                                };
+
+                                biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                            }
+                        }
+                    });
+                }
+
+                ti++;
+            });
+
+            if(currentClass.subclassDefinition != null) {
+                let ti = 0;
+                currentClass.subclassDefinition.classFeatures.forEach((trait) => {
+                    if(['Spellcasting', 'Bonus Proficiency', 'Divine Domain', 'Ability Score Improvement', 'Bonus Cantrip', 'Proficiencies', 'Hit Points', 'Arcane Tradition', 'Otherworldly Patron', 'Pact Magic', 'Expanded Spell List', 'Ranger Archetype', 'Druidic', 'Druid Circle', 'Sorcerous Origin', 'Monastic Tradition', 'Bardic College', 'Expertise', 'Roguish Archetype', 'Sacred Oath', 'Oath Spells', 'Martial Archetype'].indexOf(trait.name) !== -1) {
+                        return;
+                    }
+                    if(trait.requiredLevel > currentClass.level) return;
+
+                    if(trait.name.includes('Jack')){
+                        jackOfAllTrades = true;
+                    }
+
+                    let description = '';
+
+                    description += trait.description;
+
+                    let btrait = {
+                        name: trait.name,
+                        description: description,
+                        source: 'Class',
+                        source_type: currentClass.definition.name
+                    };
+
+                    biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+
+                    let spells = this.getFeatureSpells(character, trait.id, 'class');
+                    spells.forEach((spell) => {
+                        spell.spellCastingAbility = this._getConfig('abilities', 'id', spell.spellCastingAbilityId);
+                        classSpells.push(spell);
+                    });
+
+                    ti++;
+                });
+            }
+
+            // Class Spells
+            for(let i in character.classSpells) {
+                if(character.classSpells[i].characterClassId === currentClass.id) {
+                    character.classSpells[i].spells.forEach((spell) => {
+                        spell.spellCastingAbility = this._getConfig('abilities', 'id', spell.spellCastingAbilityId);
+                        classSpells.push(spell);
+                    });
+                }
+            }
+        });
+
+        return {
+            biography: biography,
+            spells: classSpells,
+            jackOfAllTrades: jackOfAllTrades,
+            multiClassLevel: multiClassLevel,
+            multiClasses: multiClasses,
+            level: totalLevel,
+            monkLevel: monkLevel
+        };
+    }
+
+    getFeatureSpells(character, traitId, featureType) {
+        let spellsArr = [];
+        if(character.spells[featureType] == null) return spellsArr;
+        if(character.spells[featureType].length > 0) {
+            let options = this._getObjects(character.options[featureType], 'componentId', traitId);
+            for(let i = 0; i < options.length; i++) {
+                let spells = this._getObjects(character.spells[featureType], 'componentId', options[i].definition.id);
+                for(let j = 0; j < spells.length; j++) {
+                    spellsArr.push(spells[j])
+                }
+            }
+        }
+        return spellsArr;
+    }
+
+    getInventory(character, actorEntity, features) {
+        // accumulate unique fighting styles selected
+        const fightingStyles = new Set();
+        this._getObjects(character.classes, 'name', 'Fighting Style').forEach((fS) => {
+            this._getObjects(character.choices, 'componentId', fS.id).forEach((fsOpt) => {
+                if(fsOpt.optionValue != null) {
+                    this._getObjects(fsOpt.options, 'id', fsOpt.optionValue).forEach((selOpt) => {
+                        fightingStyles.add(selOpt.label);
+                    });
+                }
+            });
+        });
+
+        let ac = 0;
+        let weaponCritRange = 20;
+        let criticalRange = 20;
+        let items = [];
+
+        const inventory = character.inventory;
+        if(inventory != null) {
+            let shieldEquipped = false;
+            let hasArmor = false;
+            inventory.forEach((item, i) => {
+                if (item.definition.type === 'Shield' && item.equipped) shieldEquipped = true;
+                if (["Light Armor", "Medium Armor", "Heavy Armor"].indexOf(item.definition.type) >= 0 && item.equipped) hasArmor = true;
+            });
+            inventory.forEach((item, i) => {
+                console.log('beyond: found inventory item ' + item.definition.name);
+
+                const isWeapon = typeof item.definition.damage === 'object' && item.definition.type !== 'Ammunition';
+                if (typeof item.definition.damage === 'object' && item.definition.type !== 'Ammunition') {
+                    let sheetItem = {
+                        img: "icons/mystery-man.png",
+                        name: "New Weapon",
+                        type: "weapon",
+                        data: {
+                            ability: {type: "String", label: "Offensive Ability"},
+                            attuned: {type: "Boolean", label: "Attuned"},
+                            bonus: {type: "String", label: "Weapon Bonus"},
+                            damage: {type: "String", label: "Damage Formula"},
+                            damageType: {type: "String", label: "Damage Type"},
+                            damage2: {type: "String", label: "Alternate Damage"},
+                            damage2Type: {type: "String", label: "Alternate Type"},
+                            description: {type: "String", label: "Description"},
+                            price: {type: "String", label: "Price"},
+                            proficient: {type: "Boolean", label: "Proficient"},
+                            properties: {type: "String", label: "Weapon Properties"},
+                            quantity: {type: "Number", label: "Quantity", value: 1},
+                            range: {type: "String", label: "Weapon Range"},
+                            source: {type: "String", label: "Source", value: item.id.toString()},
+                            weaponType: {type: "String", label: "Weapon Type"},
+                            weight: {type: "Number", label: "Weight"}
+                        }
+                    };
+
+                    let properties = '';
+                    let finesse = false;
+                    let twohanded = false;
+                    let ranged = false;
+                    let hasOffhand = false;
+                    let isOffhand = false;
+                    let versatile = false;
+                    let versatileDice = '';
+                    item.definition.properties.forEach((prop) => {
+                        if (prop.name === 'Two-Handed') {
+                            twohanded = true;
+                        }
+                        if (prop.name === 'Range') {
+                            ranged = true;
+                        }
+                        if (prop.name === 'Finesse') {
+                            finesse = true;
+                        }
+                        if (prop.name === 'Versatile') {
+                            versatile = true;
+                            versatileDice = prop.notes;
+                        }
+
+                        properties += prop.name + ', ';
+                    });
+
+                    let cv = this._getObjects(character.characterValues, 'valueTypeId', item.entityTypeId);
+                    cv.forEach((v) => {
+                        if (v.typeId === 18 && v.value === true) {
+                            hasOffhand = true;
+                            if (v.valueId === item.id) {
+                                isOffhand = true;
+                            }
+                        }
+                    });
+
+                    let magic = 0;
+                    item.definition.grantedModifiers.forEach((grantedMod) => {
+                        if (grantedMod.type === 'bonus' && grantedMod.subType === 'magic') {
+                            magic += grantedMod.value;
+                        }
+                    });
+
+                    // Finesse Weapon
+                    let isFinesse = item.definition.properties.filter((property) => {
+                        return property.name === 'Finesse';
+                    }).length > 0;
+                    if (isFinesse && this.getTotalAbilityScore(character, 2) > this.getTotalAbilityScore(character, item.definition.attackType)) {
+                        item.definition.attackType = 2;
+                    }
+
+                    // Hexblade's Weapon
+                    let characterValues = this._getObjects(character.characterValues, 'valueId', item.id);
+                    characterValues.forEach((cv) => {
+                        if (cv.typeId === 29 && this.getTotalAbilityScore(character, 6) >= this.getTotalAbilityScore(character, item.definition.attackType)) {
+                            item.definition.attackType = 6;
+                        }
+                    });
+
+                    let gwf = false;
+                    let atkmod = 0;
+                    let dmgmod = 0;
+                    let hasTWFS = false;
+
+                    // process each fighting style only once
+                    fightingStyles.forEach((fightingStyle) => {
+                        if (fightingStyle === 'Great Weapon Fighting' && twohanded) {
+                            gwf = true;
+                        }
+                        if (fightingStyle === 'Archery' && ranged) {
+                            atkmod += 2;
+                        }
+                        if (fightingStyle === 'Dueling' && !(hasOffhand || ranged || twohanded)) {
+                            dmgmod += 2;
+                        }
+                        if (fightingStyle === 'Two-Weapon Fighting') {
+                            hasTWFS = true;
+                        }
+                    });
+
+                    if (versatile && !(hasOffhand || shieldEquipped)) {
+                        item.definition.damage.diceString = versatileDice;
+                    }
+
+                    if (item.definition.isMonkWeapon && features.monkLevel > 0) {
+                        let itemAvgDmg = 0;
+                        if (item.definition.damage != null) {
+                            let dS = item.definition.damage.diceString;
+                            let itemDieCount = parseInt(dS.substr(0, dS.indexOf('d')));
+                            let itemDieSize = parseInt(dS.substr(dS.indexOf('d') + 1));
+                            itemAvgDmg = (itemDieCount * (itemDieSize + 1)) / 2;
+                        }
+
+                        let monkDieSize = Math.floor((features.monkLevel - 1) / 4) * 2 + 4;
+                        let monkAvgDmg = (1 + monkDieSize) / 2;
+
+                        if (monkAvgDmg > itemAvgDmg) {
+                            item.definition.damage.diceString = '1d' + monkDieSize;
+                        }
+
+                        let str = this.getTotalAbilityScore(character, 1);
+                        let dex = this.getTotalAbilityScore(character, 2);
+                        if (dex > str) {
+                            item.definition.attackType = 2;
+                        }
+                    }
+
+                    if (!hasTWFS && isOffhand) {
+                        dmgmod -= Math.floor((this.getTotalAbilityScore(character, item.definition.attackType) - 10) / 2);
+                    }
+
+                    sheetItem.name = item.definition.name;
+                    sheetItem.data.range.value = item.definition.range + (item.definition.range != item.definition.longRange ? '/' + item.definition.longRange : '') + 'ft.';
+                    sheetItem.data.weight.value = item.definition.weight;
+                    sheetItem.data.ability.value = this._getConfig('abilities', 'id', item.definition.attackType).short;
+                    sheetItem.data.bonus.value = magic;
+                    sheetItem.data.description.value = item.definition.description;
+                    sheetItem.data.properties.value = 'Crit: ' + Math.min(weaponCritRange, criticalRange);
+                    sheetItem.data.damage.value = item.definition.damage != null ? item.definition.damage.diceString + (gwf ? 'ro<2' : '') + (dmgmod >= 0 ? '+' + dmgmod : '-' + Math.abs(dmgmod)) : '';
+                    sheetItem.data.damageType.value = item.definition.damageType;
+
+                    item.definition.grantedModifiers.forEach((grantedMod) => {
+                        if (grantedMod.type === 'damage') {
+                            if (grantedMod.dice != null) {
+                                sheetItem.data.damage2.value = grantedMod.dice.diceString + (grantedMod.statId == null ? '' : '+' + Math.floor((this.getTotalAbilityScore(character, grantedMod.statId) - 10) / 2));
+                                sheetItem.data.damage2Type.value = grantedMod.friendlySubtypeName;
+                            }
+                        }
+                    });
+
+                    items.push(sheetItem);
+                }
+
+                const isArmor = item.definition.hasOwnProperty('armorClass') || item.definition.grantedModifiers.filter(mod => mod.subType === 'unarmored-armor-class').length > 0;
+                if (isArmor) {
+                    let sheetItem = {
+                        img: "icons/mystery-man.png",
+                        name: "New Equipment",
+                        type: "equipment",
+                        data: {
+                            armor: {type: "Number", label: "Armor Value"},
+                            armorType: {type: "String", label: "Armor Type"},
+                            attuned: {type: "Boolean", label: "Attuned"},
+                            description: {type: "String", label: "Description"},
+                            equipped: {type: "Boolean", label: "Equipped"},
+                            price: {type: "String", label: "Price"},
+                            proficient: {type: "Boolean", label: "Proficient"},
+                            quantity: {type: "Number", label: "Quantity", value: 1},
+                            source: {type: "String", label: "Source", value: item.id.toString()},
+                            stealth: {type: "Boolean", label: "Stealth Disadvantage"},
+                            strength: {type: "String", label: "Required Strength"},
+                            weight: {type: "Number", label: "Weight"}
+                        }
+                    };
+
+
+                    sheetItem.name = item.definition.name;
+                    sheetItem.data.armor.value = parseInt(item.definition.armorClass == null ? 0 : item.definition.armorClass);
+                    sheetItem.data.armorType.value = 'bonus';
+                    sheetItem.data.equipped.value = item.equipped;
+                    sheetItem.data.attuned.value = item.isAttuned;
+                    sheetItem.data.weight.value = item.definition.weight;
+                    sheetItem.data.strength.value = (item.definition.strengthRequirement == null ? 0 : item.definition.strengthRequirement).toString();
+                    sheetItem.data.description.value = item.definition.description;
+                    item.definition.grantedModifiers.forEach((grantedMod) => {
+                        if (grantedMod.type === 'set') {
+                            switch (grantedMod.subType) {
+                                case 'unarmored-armor-class':
+                                    sheetItem.data.equipped.value = false;
+                                    if (!hasArmor) {
+                                        sheetItem.data.armor.value = parseInt(grantedMod.value);
+                                        sheetItem.data.equipped.value = true;
+                                    }
+                                    break;
+                            }
+                        }
+                        if (grantedMod.type === 'bonus') {
+                            switch (grantedMod.subType) {
+                                case 'unarmored-armor-class':
+                                    sheetItem.data.equipped.value = false;
+                                    if (!hasArmor) {
+                                        sheetItem.data.armor.value += parseInt(grantedMod.value);
+                                        sheetItem.data.equipped.value = true;
+                                    }
+                                    break;
+                            }
+                        }
+                    });
+                    if (["Light Armor", "Medium Armor", "Heavy Armor"].indexOf(item.definition.type) >= 0) {
+                        // This includes features such as defense fighting style, which require the user to wear armor
+                        let aac = this._getObjects(character, 'subType', 'armored-armor-class');
+                        aac.forEach((aacb) => {
+                            sheetItem.data.armor.value += parseInt(aacb.value);
+                        });
+                    }
+                    if (["Light Armor", "Medium Armor", "Heavy Armor", "Shield"].indexOf(item.definition.type) >= 0) {
+                        sheetItem.data.armorType.value = this._getConfig('equipmentTypes', 'long', item.definition.type).short;
+                    }
+
+                    if (sheetItem.data.equipped.value) {
+                        ac += sheetItem.data.armor.value;
+                    }
+
+                    items.push(sheetItem);
+                }
+
+                const isConsumable = item.definition.isConsumable || ['Wand', 'Scroll'].indexOf(item.definition.subType) >= 0 || item.definition.tags.find(tag => tag === 'Consumable');
+                if (isConsumable) {
+                    let dice = item.definition.description.match(/\d+d\d+ ?\+? ?(\d+)+/g);
+                    let type = '';
+                    switch (item.definition.subType) {
+                        case 'Potion':
+                            type = 'potion';
+                            break;
+                        case 'Wand':
+                            type = 'wand';
+                            break;
+                        case 'Scroll':
+                            type = 'scroll';
+                            break;
+                    }
+                    let sheetItem = {
+                        img: "icons/mystery-man.png",
+                        name: item.definition.name,
+                        type: "consumable",
+                        data: {
+                            autoDestroy: {type: "Boolean", label: "Destroy on Empty", value: true},
+                            autoUse: {type: "Boolean", label: "Consume on Use", value: true},
+                            charges: {type: "Number", label: "Charges", value: 1, max: 1},
+                            consumableType: {type: "String", label: "Consumable Type", value: type},
+                            consume: {type: "String", label: "Roll on Consume", value: dice ? dice[0] : ''},
+                            description: {type: "String", label: "Description", value: item.definition.description},
+                            price: {type: "String", label: "Price", value: item.definition.cost},
+                            quantity: {type: "Number", label: "Quantity", value: item.quantity},
+                            source: {type: "String", label: "Source", value: item.id.toString()},
+                            weight: {type: "Number", label: "Weight", value: item.definition.weight}
+                        }
+                    };
+
+                    if (item.limitedUse != null) {
+                        sheetItem.data.charges.value = item.limitedUse.maxUses - item.limitedUse.numberUsed;
+                        sheetItem.data.charges.max = item.limitedUse.maxUses;
+                    }
+
+                    items.push(sheetItem);
+                }
+
+                if (!isWeapon && !isArmor && !isConsumable) {
+                    let sheetItem = {
+                        img: "icons/mystery-man.png",
+                        name: item.definition.name,
+                        type: "backpack",
+                        data: {
+                            description: {type: "String", label: "Description", value: item.definition.description},
+                            price: {type: "String", label: "Price", value: item.definition.cost},
+                            quantity: {type: "Number", label: "Quantity", value: item.quantity},
+                            source: {type: "String", label: "Source", value: item.id},
+                            weight: {type: "Number", label: "Weight", value: item.definition.weight}
+                        }
+                    };
+
+                    items.push(sheetItem);
+                }
+            });
+        }
+
+        return {
+            ac: ac,
+            items: items
+        };
+    }
+
+    parseItems(actorEntity, items, i = 0) {
+        if(items == null) return;
+        if(items.length === 0) return;
+
+        let it = actorEntity.data.items.filter(item => {
+            if(item.type === 'class') return item.name === items[i].name;
+            if(item.type === 'weapon') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'equipment') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'backpack') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'consumable') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'tool') return item.data.source.value === items[i].data.source.value;
+            return false;
+        });
+        if(it.length > 0) {
+            actorEntity.updateOwnedItem(it, items[i]);
+        }
+        else {
+            actorEntity.createOwnedItem(items[i], true);
+        }
+
+        setTimeout(() => {
+            if(items.length > i + 1) {
+                setTimeout(() => {
+                    this.parseItems(actorEntity, items, i + 1);
+                }, 200);
+            }
+        }, 200);
+    }
+
     /**
      * Get total ability score including modifiers
      *
@@ -412,16 +1034,16 @@ class BeyondImporter extends Application {
      */
     getTotalAbilityScore(character, scoreId) {
         let index = scoreId-1;
-        let base = (character.stats[index].value === null ? 10 : character.stats[index].value),
-            bonus = (character.bonusStats[index].value === null ? 0 : character.bonusStats[index].value),
-            override = (character.overrideStats[index].value === null ? 0 : character.overrideStats[index].value),
+        let base = (character.stats[index].value == null ? 10 : character.stats[index].value),
+            bonus = (character.bonusStats[index].value == null ? 0 : character.bonusStats[index].value),
+            override = (character.overrideStats[index].value == null ? 0 : character.overrideStats[index].value),
             total = base + bonus,
             modifiers = this._getObjects(character, '', this._getConfig('abilities', 'id', scoreId).long + "-score");
         if (override > 0) total = override;
         if (modifiers.length > 0) {
             let used_ids = [];
             for (let i = 0; i < modifiers.length; i++){
-                if (modifiers[i].type === 'bonus' && used_ids.indexOf(modifiers[i].id) === -1) {
+                if (modifiers[i].type == 'bonus' && used_ids.indexOf(modifiers[i].id) == -1) {
                     total += modifiers[i].value;
                     used_ids.push(modifiers[i].id);
                 }
@@ -443,18 +1065,18 @@ class BeyondImporter extends Application {
         let objects = [];
         for (let i in obj) {
             if (!obj.hasOwnProperty(i)) continue;
-            if (typeof obj[i] === 'object') {
-                if (except.indexOf(i) !== -1) {
+            if (typeof obj[i] == 'object') {
+                if (except.indexOf(i) != -1) {
                     continue;
                 }
                 objects = objects.concat(this._getObjects(obj[i], key, val));
             } else
             //if key matches and value matches or if key matches and value is not passed (eliminating the case where key matches but passed value does not)
-            if (i === key && obj[i] === val || i === key && val === '') { //
+            if (i == key && obj[i] == val || i == key && val == '') { //
                 objects.push(obj);
-            } else if (obj[i] === val && key === ''){
+            } else if (obj[i] == val && key == ''){
                 //only add if the object is not already in the array
-                if (objects.lastIndexOf(obj) === -1){
+                if (objects.lastIndexOf(obj) == -1){
                     objects.push(obj);
                 }
             }
@@ -464,7 +1086,7 @@ class BeyondImporter extends Application {
 
     _getConfig(type, key, value) {
         return CONFIG.BeyondImporter[type].find((item) => {
-            return item[key] === value;
+            return item[key] == value;
         });
     }
 }
@@ -491,5 +1113,11 @@ CONFIG.BeyondImporter = {
         { id: 7, short: 'LE', long: 'Lawful Evil' },
         { id: 8, short: 'NE', long: 'Neutral Evil' },
         { id: 9, short: 'CE', long: 'Chaotic Evil' }
+    ],
+    equipmentTypes: [
+        { short: 'light', long: 'Light Armor' },
+        { short: 'medium', long: 'Medium Armor' },
+        { short: 'heavy', long: 'Heavy Armor' },
+        { short: 'shield', long: 'Shield' }
     ]
 };
