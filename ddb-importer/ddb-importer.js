@@ -128,13 +128,13 @@ class BeyondImporter extends Application {
             return;
         }
 
-        if (data == null) {
+        if (data === null) {
             console.error('No character data provided');
             return;
         }
 
         // Create new actor (GM only) if entity is not pre-defined
-        if(opts.actor == null) {
+        if(opts.actor === null) {
             Actor5e.create({ name: data.character.name, type: 'character' }, true).then(actor => {
                 this.parseCharacterData(actor, data);
             });
@@ -176,7 +176,7 @@ class BeyondImporter extends Application {
         // Set Traits
         let senses = [];
         this._getObjects(character.modifiers, 'type', 'sense').forEach((sense) => {
-            if (senses.indexOf(sense.friendlySubtypeName) == -1) {
+            if (senses.indexOf(sense.friendlySubtypeName) === -1) {
                 let name = sense.friendlySubtypeName;
                 if(sense.value != null) name += ' '+sense.value+' ft.'
                 senses.push(name);
@@ -190,7 +190,7 @@ class BeyondImporter extends Application {
             const profs = [];
             for (let modType in character.modifiers) {
                 character.modifiers[modType].filter((mod) => {
-                    return mod.type == 'proficiency' && mod.subType == ability.label.toLowerCase().replace(/ /g, '-')+'-saving-throws' && mod.isGranted;
+                    return mod.type === 'proficiency' && mod.subType === ability.label.toLowerCase().replace(/ /g, '-')+'-saving-throws' && mod.isGranted;
                 }).forEach((mod) => {
                     profs.push(mod);
                 });
@@ -203,7 +203,7 @@ class BeyondImporter extends Application {
             actor.data.abilities[abl].mod = Math.floor((actor.data.abilities[abl].value - 10) / 2);
             actor.data.abilities[abl].save = Math.floor((actor.data.abilities[abl].value - 10) / 2);
 
-            if(actor.data.abilities[abl].proficient == '1') {
+            if(actor.data.abilities[abl].proficient === '1') {
                 actor.data.abilities[abl].save += actor.data.attributes.prof.value;
             }
         }
@@ -218,18 +218,18 @@ class BeyondImporter extends Application {
                     description: { type: "String", label: "Description", value: "" },
                     levels: { type: "String", label: "Class Levels", value: charClass.level.toString() },
                     source: { type: "String", label: "Source" },
-                    subclass: { type: "String", label: "Subclass", value: charClass.subclassDefinition == null ? '' : charClass.subclassDefinition.name }
+                    subclass: { type: "String", label: "Subclass", value: charClass.subclassDefinition === null ? '' : charClass.subclassDefinition.name }
                 }
             };
 
-            if(actor.items.filter(it => it.name == item.name).length > 0) {
-                const it = actor.items.filter(it => it.name == item.name)[0];
+            if(actor.items.filter(it => it.name === item.name).length > 0) {
+                const it = actor.items.filter(it => it.name === item.name)[0];
                 actorEntity.updateOwnedItem(it, Object.assign(it, item));
             } else {
                 actorEntity.createOwnedItem(item, true);
             }
 
-            if (actor.data.attributes.spellcasting.value == '') {
+            if (actor.data.attributes.spellcasting.value === '') {
                 if (charClass.spellCastingAbilityId != null) {
                     actor.data.attributes.spellcasting.value = this._getConfig('abilities', 'id', charClass.spellCastingAbilityId).short;
                 } else if (charClass.subclassDefinition != null) {
@@ -238,7 +238,7 @@ class BeyondImporter extends Application {
                     }
                 }
 
-                if(actor.data.attributes.spellcasting.value != '') {
+                if(actor.data.attributes.spellcasting.value !== '') {
                     actor.data.attributes.spelldc.value = 8 + actor.data.abilities[actor.data.attributes.spellcasting.value].mod + actor.data.attributes.prof.value;
                 }
             }
@@ -248,9 +248,9 @@ class BeyondImporter extends Application {
         for(let skl in actor.data.skills) {
             let skill = actor.data.skills[skl];
             const skillData = this._getObjects(character, 'friendlySubtypeName', skill.label);
-            const prof = skillData.filter(sp => sp.type == 'proficiency').length > 0;
-            const exp = skillData.filter(sp => sp.type == 'expertise').length > 0;
-            const bonus = skillData.filter(sb => sb.type == 'bonus').reduce((total, skillBon) => {
+            const prof = skillData.filter(sp => sp.type === 'proficiency').length > 0;
+            const exp = skillData.filter(sp => sp.type === 'expertise').length > 0;
+            const bonus = skillData.filter(sb => sb.type === 'bonus').reduce((total, skillBon) => {
                 let bon = 0;
                 if (skillBon.value != null) {
                     bon = skillBon.value;
@@ -260,11 +260,11 @@ class BeyondImporter extends Application {
                 return total + bon;
             }, 0) + (prof ? actor.data.attributes.prof.value + (exp ? actor.data.attributes.prof.value : 0) : 0);
 
-            skill.value = 0 + (prof ? 1 + (exp ? 1 : 0) : 0);
+            skill.value = prof ? 1 + (exp ? 1 : 0) : 0;
             skill.mod = actor.data.abilities[skill.ability].mod + bonus;
 
             // passive perception
-            if(skill.label == 'Perception') {
+            if(skill.label === 'Perception') {
                 actor.data.traits.perception.value = 10 + skill.mod;
             }
 
@@ -285,14 +285,14 @@ class BeyondImporter extends Application {
 
         // scan for modifiers except those in items, because we will get those bonuses from the items once they are imported
         // NOTE: this also handles the problem that Beyond includes modifiers from items that are not currently equipped/attuned
-        let hpLevelBonus = this._getObjects(character.modifiers, 'subType', 'hit-points-per-level', ['item']).forEach((bonus) => {
+        this._getObjects(character.modifiers, 'subType', 'hit-points-per-level', ['item']).forEach((bonus) => {
             let level = totalLevel;
 
             // Ensure that per-level bonuses from class features only apply for the levels of the class and not the character's total level.
             let charClasses = character.classes.filter((charClass) => {
-                let output = charClass.definition.classFeatures.findIndex(cF => cF.id == bonus.componentId) >= 0;
+                let output = charClass.definition.classFeatures.findIndex(cF => cF.id === bonus.componentId) >= 0;
                 if (charClass.subclassDefinition != null) {
-                    output = output || charClass.subclassDefinition.classFeatures.findIndex(cF => cF.id == bonus.componentId) >= 0;
+                    output = output || charClass.subclassDefinition.classFeatures.findIndex(cF => cF.id === bonus.componentId) >= 0;
                 }
                 return output;
             });
@@ -317,7 +317,7 @@ class BeyondImporter extends Application {
      */
     getSpeeds(character) {
         let weightSpeeds = character.race.weightSpeeds;
-        if(weightSpeeds == null) {
+        if(weightSpeeds === null) {
             weightSpeeds = {
                 "normal": {
                     "walk": 30,
@@ -332,7 +332,7 @@ class BeyondImporter extends Application {
         let speedMods = this._getObjects(character.modifiers, 'subType', 'speed');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type == 'set') {
+                if(speedMod.type === 'set') {
                     weightSpeeds.normal.walk = (speedMod.value > weightSpeeds.normal.walk ? speedMod.value : weightSpeeds.normal.walk);
                 }
             });
@@ -341,8 +341,8 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'innate-speed-flying');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type == 'set' && speedMod.id.indexOf('spell') == -1) {
-                    if(speedMod.value == null) speedMod.value = weightSpeeds.normal.walk;
+                if(speedMod.type === 'set' && speedMod.id.indexOf('spell') === -1) {
+                    if(speedMod.value === null) speedMod.value = weightSpeeds.normal.walk;
                     weightSpeeds.normal.fly = (speedMod.value > weightSpeeds.normal.fly ? speedMod.value : weightSpeeds.normal.fly);
                 }
             });
@@ -351,8 +351,8 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'innate-speed-swimming');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type == 'set' && speedMod.id.indexOf('spell') == -1) {
-                    if(speedMod.value == null) speedMod.value = weightSpeeds.normal.walk;
+                if(speedMod.type === 'set' && speedMod.id.indexOf('spell') === -1) {
+                    if(speedMod.value === null) speedMod.value = weightSpeeds.normal.walk;
                     weightSpeeds.normal.swim = (speedMod.value > weightSpeeds.normal.swim ? speedMod.value : weightSpeeds.normal.swim);
                 }
             });
@@ -361,8 +361,8 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'innate-speed-climbing');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type == 'set' && speedMod.id.indexOf('spell') == -1) {
-                    if(speedMod.value == null) speedMod.value = weightSpeeds.normal.walk;
+                if(speedMod.type === 'set' && speedMod.id.indexOf('spell') === -1) {
+                    if(speedMod.value === null) speedMod.value = weightSpeeds.normal.walk;
                     weightSpeeds.normal.climb = (speedMod.value > weightSpeeds.normal.climb ? speedMod.value : weightSpeeds.normal.climb);
                 }
             });
@@ -371,7 +371,7 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'unarmored-movement');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type == 'bonus') {
+                if(speedMod.type === 'bonus') {
                     speedMod.value = isNaN(weightSpeeds.normal.walk + speedMod.value) ? 0 : speedMod.value;
                     weightSpeeds.normal.walk += speedMod.value;
                     if(weightSpeeds.normal.fly > 0) weightSpeeds.normal.fly += speedMod.value;
@@ -384,7 +384,7 @@ class BeyondImporter extends Application {
         speedMods = this._getObjects(character.modifiers, 'subType', 'speed');
         if(speedMods != null) {
             speedMods.forEach((speedMod) => {
-                if(speedMod.type == 'bonus') {
+                if(speedMod.type === 'bonus') {
                     speedMod.value = isNaN(weightSpeeds.normal.walk + speedMod.value) ? 0 : speedMod.value;
                     weightSpeeds.normal.walk += speedMod.value;
                     if(weightSpeeds.normal.fly > 0) weightSpeeds.normal.fly += speedMod.value;
@@ -412,16 +412,16 @@ class BeyondImporter extends Application {
      */
     getTotalAbilityScore(character, scoreId) {
         let index = scoreId-1;
-        let base = (character.stats[index].value == null ? 10 : character.stats[index].value),
-            bonus = (character.bonusStats[index].value == null ? 0 : character.bonusStats[index].value),
-            override = (character.overrideStats[index].value == null ? 0 : character.overrideStats[index].value),
+        let base = (character.stats[index].value === null ? 10 : character.stats[index].value),
+            bonus = (character.bonusStats[index].value === null ? 0 : character.bonusStats[index].value),
+            override = (character.overrideStats[index].value === null ? 0 : character.overrideStats[index].value),
             total = base + bonus,
             modifiers = this._getObjects(character, '', this._getConfig('abilities', 'id', scoreId).long + "-score");
         if (override > 0) total = override;
         if (modifiers.length > 0) {
             let used_ids = [];
             for (let i = 0; i < modifiers.length; i++){
-                if (modifiers[i].type == 'bonus' && used_ids.indexOf(modifiers[i].id) == -1) {
+                if (modifiers[i].type === 'bonus' && used_ids.indexOf(modifiers[i].id) === -1) {
                     total += modifiers[i].value;
                     used_ids.push(modifiers[i].id);
                 }
@@ -443,18 +443,18 @@ class BeyondImporter extends Application {
         let objects = [];
         for (let i in obj) {
             if (!obj.hasOwnProperty(i)) continue;
-            if (typeof obj[i] == 'object') {
-                if (except.indexOf(i) != -1) {
+            if (typeof obj[i] === 'object') {
+                if (except.indexOf(i) !== -1) {
                     continue;
                 }
                 objects = objects.concat(this._getObjects(obj[i], key, val));
             } else
             //if key matches and value matches or if key matches and value is not passed (eliminating the case where key matches but passed value does not)
-            if (i == key && obj[i] == val || i == key && val == '') { //
+            if (i === key && obj[i] === val || i === key && val === '') { //
                 objects.push(obj);
-            } else if (obj[i] == val && key == ''){
+            } else if (obj[i] === val && key === ''){
                 //only add if the object is not already in the array
-                if (objects.lastIndexOf(obj) == -1){
+                if (objects.lastIndexOf(obj) === -1){
                     objects.push(obj);
                 }
             }
@@ -464,7 +464,7 @@ class BeyondImporter extends Application {
 
     _getConfig(type, key, value) {
         return CONFIG.BeyondImporter[type].find((item) => {
-            return item[key] == value;
+            return item[key] === value;
         });
     }
 }
