@@ -235,12 +235,6 @@ class BeyondImporter extends Application {
                 }
             };
 
-            // if(actor.items.filter(it => it.name === item.name).length > 0) {
-            //     const it = actor.items.filter(it => it.name === item.name)[0];
-            //     actorEntity.updateOwnedItem(it, Object.assign(it, item));
-            // } else {
-            //     actorEntity.createOwnedItem(item, true);
-            // }
             items = items.concat([item]);
 
             if (actor.data.attributes.spellcasting.value === '') {
@@ -259,7 +253,7 @@ class BeyondImporter extends Application {
         });
 
         // Set Skills / Passive Perception
-        for(let skl in actor.data.skills) {
+        for (let skl in actor.data.skills) {
             let skill = actor.data.skills[skl];
             const skillData = this._getObjects(character, 'friendlySubtypeName', skill.label);
             const prof = skillData.filter(sp => sp.type === 'proficiency').length > 0;
@@ -284,6 +278,83 @@ class BeyondImporter extends Application {
 
             actor.data.skills[skl] = skill;
         }
+
+        // Set Spells
+        classSpells.forEach((spell) => {
+            let duration = 'Instantaneous';
+            let concentration = false;
+            if (spell.definition.duration.durationType !== 'Instantaneous') {
+                concentration = spell.definition.duration.durationType === 'Concentration';
+                duration = spell.definition.duration.durationInterval+' '+spell.definition.duration.durationUnit+(spell.definition.duration.durationInterval === 1 ? '' : 's');
+            }
+
+            let spellType = 'utility';
+            let damage = '';
+            let damageType = '';
+            if (spell.definition.requiresSavingThrow) {
+                spellType = 'save';
+            } else if (spell.definition.tags.indexOf('Healing') >= 0) {
+                spellType = 'heal';
+                damageType = 'healing';
+                const spellMod = spell.definition.modifiers.find(mod => mod.type === 'bonus' && mod.subType == 'hit-points');
+                if(spellMod != null) {
+                    if (spellMod.die.diceCount > 0) {
+                        damage += spellMod.die.diceString;
+                    }
+                    if (spellMod.die.fixedValue) {
+                        damage += (damage === '' ? '' : '+')+spellMod.die.fixedValue;
+                    }
+                    if (spellMod.usePrimaryStat) {
+                        const abl = Math.floor((this.getTotalAbilityScore(character, spell.spellCastingAbilityId) - 10) / 2);
+                        damage += (damage === '' ? '' : (abl >= 0 ? '+' : '-'))+Math.abs(abl);
+                    }
+                }
+            } else if (spell.definition.requiresAttackRoll) {
+                spellType = 'attack';
+                const spellMod = spell.definition.modifiers.find(mod => mod.type === 'damage');
+                damageType = spellMod.subType;
+                if(spellMod != null) {
+                    if (spellMod.die.diceCount > 0) {
+                        damage += spellMod.die.diceString;
+                    }
+                    if (spellMod.die.fixedValue) {
+                        damage += (damage === '' ? '' : '+')+spellMod.die.fixedValue;
+                    }
+                    if (spellMod.usePrimaryStat) {
+                        const abl = Math.floor((this.getTotalAbilityScore(character, spell.spellCastingAbilityId) - 10) / 2);
+                        damage += (damage === '' ? '' : (abl >= 0 ? '+' : '-'))+Math.abs(abl);
+                    }
+                }
+            }
+
+            let spellItem = {
+                name: spell.definition.name,
+                type: "spell",
+                img: 'icons/mystery-man.png',
+                data: {
+                    ability: {type: "String", label: "Spellcasting Ability", value: this._getConfig('abilities', 'id', spell.spellCastingAbilityId).short},
+                    components: {type: "String", label: "Spell Components", value: spell.definition.components.map(comp => this._getConfig('spellComponents', 'id', comp).short).join(', ')},
+                    concentration: {type: "Boolean", label: "Requires Concentration", value: concentration},
+                    damage: {type: "String", label: "Spell Damage", value: damage},
+                    damageType: {type: "String", label: "Damage Type", value: damageType},
+                    description: {type: "String", label: "Description", value: spell.definition.description},
+                    duration: {type: "String", label: "Duration", value: duration},
+                    level: {type: "Number", label: "Spell Level", value: spell.definition.level},
+                    materials: {type: "String", label: "Materials", value: spell.definition.componentsDescription},
+                    range: {type: "String", label: "Range", value: spell.definition.range.rangeValue+' ft.'},
+                    ritual: {type: "Boolean", label: "Cast as Ritual", value: spell.definition.ritual},
+                    save: {type: "String", label: "Saving Throw", value: spell.definition.saveDcAbilityId == null ? '' :this._getConfig('abilities', 'id', spell.definition.saveDcAbilityId).short},
+                    school: {type: "String", label: "Spell School", value: spell.definition.school === 'Transmutation' ? 'trs' : spell.definition.school.toLowerCase().substring(0, 3)},
+                    source: {type: "String", label: "Source", value: spell.id.toString()},
+                    spellType: {type: "String", label: "Spell Type", value: spellType},
+                    target: {type: "String", label: "Target", value: ""},
+                    time: {type: "String", label: "Casting Time", value: spell.definition.activation.activationTime+' '+this._getConfig('spellActivationTimes', 'id', spell.definition.activation.activationType).long+(spell.definition.activation.activationTime === 1 ? '' : 's')}
+                }
+            };
+
+            // console.log(spellItem);
+            items.push(spellItem);
+        });
 
         this.parseItems(actorEntity, items);
         actorEntity.update(actor, true);
@@ -423,6 +494,11 @@ class BeyondImporter extends Application {
         return speed;
     }
 
+    /**
+     * Get character features
+     *
+     * @param {Object} character - The character data
+     */
     getFeatures(character) {
         let biography = '';
         let classSpells = [];
@@ -571,6 +647,13 @@ class BeyondImporter extends Application {
 
                 let spells = this.getFeatureSpells(character, trait.id, 'class');
                 spells.forEach((spell) => {
+                    if(spell.spellCastingAbilityId == null) {
+                        if(currentClass.subclassDefinition != null) {
+                            spell.spellCastingAbilityId = currentClass.subclassDefinition.spellCastingAbilityId;
+                        } else {
+                            spell.spellCastingAbilityId = currentClass.definition.spellCastingAbilityId;
+                        }
+                    }
                     spell.spellCastingAbility = this._getConfig('abilities', 'id', spell.spellCastingAbilityId);
                     classSpells.push(spell);
                 });
@@ -635,8 +718,16 @@ class BeyondImporter extends Application {
 
             // Class Spells
             for(let i in character.classSpells) {
+                const charClass = character.classes.find(cc => cc.id === character.classSpells[i].characterClassId);
                 if(character.classSpells[i].characterClassId === currentClass.id) {
                     character.classSpells[i].spells.forEach((spell) => {
+                        if(spell.spellCastingAbilityId == null && charClass != null) {
+                            if(charClass.subclassDefinition != null) {
+                                spell.spellCastingAbilityId = charClass.subclassDefinition.spellCastingAbilityId;
+                            } else {
+                                spell.spellCastingAbilityId = charClass.definition.spellCastingAbilityId;
+                            }
+                        }
                         spell.spellCastingAbility = this._getConfig('abilities', 'id', spell.spellCastingAbilityId);
                         classSpells.push(spell);
                     });
@@ -655,6 +746,13 @@ class BeyondImporter extends Application {
         };
     }
 
+    /**
+     * Get character inventory and armor class
+     *
+     * @param {Object} character - The character data
+     * @param {Number} traitId - Character trait id from D&D Beyond
+     * @param {String} featureType - The type of feature being searched
+     */
     getFeatureSpells(character, traitId, featureType) {
         let spellsArr = [];
         if(character.spells[featureType] == null) return spellsArr;
@@ -670,6 +768,12 @@ class BeyondImporter extends Application {
         return spellsArr;
     }
 
+    /**
+     * Get character inventory and armor class
+     *
+     * @param {Object} character - The character data
+     * @param {Object} actorEntity - The Actor5e entity
+     */
     getInventory(character, actorEntity, features) {
         // accumulate unique fighting styles selected
         const fightingStyles = new Set();
@@ -997,6 +1101,13 @@ class BeyondImporter extends Application {
         };
     }
 
+    /**
+     * Parse actor items
+     *
+     * @param {Object} actorEntity - The Actor5e entity
+     * @param {Number} items - an array of items being added
+     * @param {Number} i - Optional. Leave blank on initial call.
+     */
     parseItems(actorEntity, items, i = 0) {
         if(items == null) return;
         if(items.length === 0) return;
@@ -1008,6 +1119,7 @@ class BeyondImporter extends Application {
             if(item.type === 'backpack') return item.data.source.value === items[i].data.source.value;
             if(item.type === 'consumable') return item.data.source.value === items[i].data.source.value;
             if(item.type === 'tool') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'spell') return item.data.source.value === items[i].data.source.value;
             return false;
         });
         if(it.length > 0) {
@@ -1038,7 +1150,7 @@ class BeyondImporter extends Application {
             bonus = (character.bonusStats[index].value == null ? 0 : character.bonusStats[index].value),
             override = (character.overrideStats[index].value == null ? 0 : character.overrideStats[index].value),
             total = base + bonus,
-            modifiers = this._getObjects(character, '', this._getConfig('abilities', 'id', scoreId).long + "-score");
+            modifiers = this._getObjects(character, '', this._getConfig('abilities', 'id', scoreId).long.toLowerCase() + "-score");
         if (override > 0) total = override;
         if (modifiers.length > 0) {
             let used_ids = [];
@@ -1119,5 +1231,18 @@ CONFIG.BeyondImporter = {
         { short: 'medium', long: 'Medium Armor' },
         { short: 'heavy', long: 'Heavy Armor' },
         { short: 'shield', long: 'Shield' }
+    ],
+    spellComponents: [
+        { id: 1, short: 'V', long: 'Verbal' },
+        { id: 2, short: 'S', long: 'Somatic' },
+        { id: 3, short: 'M', long: 'Material' }
+    ],
+    spellActivationTimes: [
+        { id: 0, short: '', long: 'No Action' },
+        { id: 1, short: 'A', long: 'Action' },
+        { id: 3, short: 'BA', long: 'Bonus Action' },
+        { id: 4, short: 'R', long: 'Reaction' },
+        { id: 6, short: 'Min', long: 'Minute' },
+        { id: 7, short: 'Hour', long: 'Hour' },
     ]
 };
