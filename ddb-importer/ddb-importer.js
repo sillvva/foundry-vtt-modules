@@ -40,7 +40,7 @@ class BeyondImporter extends Application {
      */
     hookActorList() {
         Hooks.on('renderActorList', (app, html, data) => {
-            console.log(game);
+            // console.log(game);
             const importButton = $('<button class="import-dndbeyond-list" style="min-width: 96%;"><span class="fas fa-file-import"></span> Beyond Import</button>');
 
             html.find('.import-dndbeyond-list').remove();
@@ -153,7 +153,7 @@ class BeyondImporter extends Application {
      * @param {Object} data - Character JSON data string parsed as an object after import
      */
     parseCharacterData(actorEntity, character) {
-        console.log(character);
+        // console.log(character);
         let actor = Object.assign({}, actorEntity.data);
         // delete actor._id;
 
@@ -193,18 +193,18 @@ class BeyondImporter extends Application {
         obj['data.traits.languages.value'] = this.getLanguages(character).join(', ');
         obj['data.traits.senses.value'] = this.getSenses(character).join(', ');
 
-        // Set Currency
-        // obj['data.traits.cp.value'] = character.currencies.cp;
-        // obj['data.traits.sp.value'] = character.currencies.sp + 5 * character.currencies.ep;
-        // obj['data.traits.gp.value'] = character.currencies.gp;
-        // obj['data.traits.pp.value'] = character.currencies.pp;
-
         // Set Resistances, Immunities, Vulnerabilities
         const defenses = this.getDefemseAdjustments(character);
         obj['data.traits.ci.value'] = defenses.conditionImmunities.join(', ');
         obj['data.traits.di.value'] = defenses.damageImmunities.join(', ');
         obj['data.traits.dr.value'] = defenses.resistances.join(', ');
         obj['data.traits.dv.value'] = defenses.vulnerabilities.join(', ');
+
+        // Set Currency
+        obj['data.currency.cp.value'] = character.currencies.cp;
+        obj['data.currency.sp.value'] = character.currencies.sp + 5 * character.currencies.ep;
+        obj['data.currency.gp.value'] = character.currencies.gp;
+        obj['data.currency.pp.value'] = character.currencies.pp;
 
         // Set Abilities
         for (let abl in actor.data.abilities) {
