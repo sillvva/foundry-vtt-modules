@@ -17,7 +17,7 @@ class BeyondImporter extends Application {
      */
     hookActorSheet() {
         Hooks.on('renderActor5eSheet', (app, html, data) => {
-            // console.log(app, data);
+            // console.log(data);
             if(!data.owner) return;
 
             const windowHeader = html.parent().parent().find('.window-header');
@@ -157,6 +157,9 @@ class BeyondImporter extends Application {
         let actor = Object.assign({}, actorEntity.data);
         // delete actor._id;
 
+        console.log(this.getDefemseAdjustments(character));
+        return;
+
         let items = [];
 
         let features = this.getFeatures(character);
@@ -189,15 +192,16 @@ class BeyondImporter extends Application {
         obj['data.attributes.ac.value'] = inv.ac;
 
         // Set Traits
-        let senses = [];
-        this._getObjects(character.modifiers, 'type', 'sense').forEach((sense) => {
-            if (senses.indexOf(sense.friendlySubtypeName) === -1) {
-                let name = sense.friendlySubtypeName;
-                if(sense.value != null) name += ' '+sense.value+' ft.'
-                senses.push(name);
-            }
-        });
-        obj['data.traits.senses.value'] = senses.join(', ');
+        obj['data.traits.size.value'] = character.race.size;
+        obj['data.traits.languages.value'] = this.getLanguages(character).join(', ');
+        obj['data.traits.senses.value'] = this.getSenses(character).join(', ');
+
+        // Set Resistances, Immunities, Vulnerabilities
+        const defenses = this.getDefemseAdjustments(character);
+        obj['data.traits.ci.value'] = defenses.conditionImmunities.join(', ');
+        obj['data.traits.di.value'] = defenses.damageImmunities.join(', ');
+        obj['data.traits.dr.value'] = defenses.resistances.join(', ');
+        obj['data.traits.dv.value'] = defenses.vulnerabilities.join(', ');
 
         // Set Abilities
         for (let abl in actor.data.abilities) {
@@ -361,11 +365,41 @@ class BeyondImporter extends Application {
         });
 
         actorEntity.update(obj, true);
-        actorEntity.render(true);
+        this.parseItems(actorEntity, items);
+    }
 
-        setTimeout(() => {
-            this.parseItems(actorEntity, items);
-        }, 200);
+    getDefemseAdjustments(character) {
+        let conditionImmunities = [];
+        let damageImmunities = [];
+        this._getObjects(character.modifiers, 'type', 'immunity').forEach(da => {
+            if (da.entityTypeId === 1737492944 || da.entityTypeId == null) conditionImmunities.push(da.subType);
+            else damageImmunities.push(da.subType);
+        });
+        let resistances = this._getObjects(character.modifiers, 'type', 'resistance');
+        let vulnerabilities = this._getObjects(character.modifiers, 'type', 'vulnerability');
+
+        character.customDefenseAdjustments.forEach(cda => {
+            if (cda.type === 2) {
+                let conf = this._getConfig('customDamageDefenseAdjustments', 'id', cda.id);
+                if (conf.type === 'immunity') {
+                    damageImmunities.push(conf.subType);
+                } else if (conf.type === 'resistance') {
+                    resistances.push(conf.subType);
+                } else if (conf.type === 'vulnerability') {
+                    vulnerabilities.push(conf.subType);
+                }
+            } else if (cda.type === 1) {
+                let conf = this._getConfig('customConditionDefenseAdjustments', 'id', cda.id);
+                conditionImmunities.push(conf.subType);
+            }
+        });
+
+        return {
+            conditionImmunities: conditionImmunities.filter((value, index, self) => self.indexOf(value) === index),
+            damageImmunities: damageImmunities.filter((value, index, self) => self.indexOf(value) === index),
+            resistances: $.map(resistances, mod => mod.subType).filter((value, index, self) => self.indexOf(value) === index),
+            vulnerabilities: $.map(vulnerabilities, mod => mod.subType).filter((value, index, self) => self.indexOf(value) === index)
+        };
     }
 
     /**
@@ -496,6 +530,41 @@ class BeyondImporter extends Application {
         }
 
         return speed;
+    }
+
+    /**
+     * Get character senses
+     *
+     * @param {Object} character - Character JSON data string parsed as an object after import
+     */
+    getSenses(character) {
+        let senses = [];
+        this._getObjects(character.modifiers, 'type', 'sense').forEach((sense) => {
+            if (senses.indexOf(sense.friendlySubtypeName) === -1) {
+                let name = sense.friendlySubtypeName;
+                if(sense.value != null) name += ' '+sense.value+' ft.'
+                senses.push(name);
+            }
+        });
+        return senses;
+    }
+
+    /**
+     * Get character languages
+     *
+     * @param {Object} character - Character JSON data string parsed as an object after import
+     */
+    getLanguages(character) {
+        let languages = getObjects(character, 'type', 'language');
+
+        let langs = [];
+        if(languages != null) {
+            languages.forEach((language) => {
+                langs.push(language.friendlySubtypeName);
+            });
+        }
+
+        return langs;
     }
 
     /**
@@ -1244,5 +1313,66 @@ CONFIG.BeyondImporter = {
         { id: 4, short: 'R', long: 'Reaction' },
         { id: 6, short: 'Min', long: 'Minute' },
         { id: 7, short: 'Hour', long: 'Hour' },
+    ],
+    customDamageDefenseAdjustments: [
+        { id: 1, type: 'resistance', subType: 'Bludgeonining' },
+        { id: 2, type: 'resistance', subType: 'Piercing' },
+        { id: 3, type: 'resistance', subType: 'Slashing' },
+        { id: 4, type: 'resistance', subType: 'Lightning' },
+        { id: 5, type: 'resistance', subType: 'Thunder' },
+        { id: 6, type: 'resistance', subType: 'Poison' },
+        { id: 7, type: 'resistance', subType: 'Cold' },
+        { id: 8, type: 'resistance', subType: 'Radiant' },
+        { id: 9, type: 'resistance', subType: 'Fire' },
+        { id: 10, type: 'resistance', subType: 'Necrotic' },
+        { id: 11, type: 'resistance', subType: 'Acid' },
+        { id: 12, type: 'resistance', subType: 'Psychic' },
+        { id: 47, type: 'resistance', subType: 'Force' },
+        { id: 51, type: 'resistance', subType: 'Ranged attacks' },
+        { id: 52, type: 'resistance', subType: 'Damage dealt by traps' },
+        { id: 54, type: 'resistance', subType: 'Bludgeoning from non magical attacks' },
+        { id: 17, type: 'immunity', subType: 'Bludgeonining' },
+        { id: 18, type: 'immunity', subType: 'Piercing' },
+        { id: 19, type: 'immunity', subType: 'Slashing' },
+        { id: 20, type: 'immunity', subType: 'Lightning' },
+        { id: 21, type: 'immunity', subType: 'Thunder' },
+        { id: 22, type: 'immunity', subType: 'Poison' },
+        { id: 23, type: 'immunity', subType: 'Cold' },
+        { id: 24, type: 'immunity', subType: 'Radiant' },
+        { id: 25, type: 'immunity', subType: 'Fire' },
+        { id: 26, type: 'immunity', subType: 'Necrotic' },
+        { id: 27, type: 'immunity', subType: 'Acid' },
+        { id: 28, type: 'immunity', subType: 'Psychic' },
+        { id: 48, type: 'immunity', subType: 'Force' },
+        { id: 33, type: 'vulnerability', subType: 'Bludgeonining' },
+        { id: 34, type: 'vulnerability', subType: 'Piercing' },
+        { id: 35, type: 'vulnerability', subType: 'Slashing' },
+        { id: 36, type: 'vulnerability', subType: 'Lightning' },
+        { id: 37, type: 'vulnerability', subType: 'Thunder' },
+        { id: 38, type: 'vulnerability', subType: 'Poison' },
+        { id: 39, type: 'vulnerability', subType: 'Cold' },
+        { id: 40, type: 'vulnerability', subType: 'Radiant' },
+        { id: 41, type: 'vulnerability', subType: 'Fire' },
+        { id: 42, type: 'vulnerability', subType: 'Necrotic' },
+        { id: 43, type: 'vulnerability', subType: 'Acid' },
+        { id: 44, type: 'vulnerability', subType: 'Psychic' },
+        { id: 49, type: 'vulnerability', subType: 'Force' }
+    ],
+    customConditionDefenseAdjustments: [
+        { id: 1, subType: 'Blinded' },
+        { id: 2, subType: 'Charmed"' },
+        { id: 3, subType: 'Deafened' },
+        { id: 4, subType: 'Exhaustion"' },
+        { id: 5, subType: 'Frightened' },
+        { id: 6, subType: 'Grappled"' },
+        { id: 7, subType: 'Incapacitated' },
+        { id: 8, subType: 'Invisible"' },
+        { id: 9, subType: 'Paralyzed' },
+        { id: 10, subType: 'Petrified"' },
+        { id: 11, subType: 'Poisoned' },
+        { id: 12, subType: 'Prone"' },
+        { id: 13, subType: 'Restrained' },
+        { id: 14, subType: 'Stunned"' },
+        { id: 15, subType: 'Unconscious' }
     ]
 };
