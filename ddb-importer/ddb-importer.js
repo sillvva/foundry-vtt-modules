@@ -157,9 +157,6 @@ class BeyondImporter extends Application {
         let actor = Object.assign({}, actorEntity.data);
         // delete actor._id;
 
-        console.log(this.getDefemseAdjustments(character));
-        return;
-
         let items = [];
 
         let features = this.getFeatures(character);
@@ -173,7 +170,7 @@ class BeyondImporter extends Application {
 
         // Set Details
         obj['data.details.level.value'] = features.level;
-        obj['data.details.race.value'] = character.race.fullName;
+        obj['data.details.race.value'] = (character.race.subRaceShortName == null || character.race.subRaceShortName === '' ? '' : character.race.subRaceShortName+' ')+character.race.baseName;
         obj['data.details.alignment.value'] = this._getConfig('alignments', 'id', character.alignmentId).long;
         obj['data.details.background.value'] = character.background.definition != null ? character.background.definition.name : (character.background.customBackground != null ? character.background.customBackground.name : '');
         obj['data.details.xp.value'] = character.currentXp.toString();
@@ -560,7 +557,7 @@ class BeyondImporter extends Application {
      * @param {Object} character - Character JSON data string parsed as an object after import
      */
     getLanguages(character) {
-        let languages = getObjects(character, 'type', 'language');
+        let languages = this._getObjects(character, 'type', 'language');
 
         let langs = [];
         if(languages != null) {
@@ -869,18 +866,16 @@ class BeyondImporter extends Application {
         let weaponCritRange = 20;
         let criticalRange = 20;
         let items = [];
+        let hasArmor = false;
+        let shieldEquipped = false;
 
         const inventory = character.inventory;
         if(inventory != null) {
-            let shieldEquipped = false;
-            let hasArmor = false;
             inventory.forEach((item, i) => {
                 if (item.definition.type === 'Shield' && item.equipped) shieldEquipped = true;
                 if (["Light Armor", "Medium Armor", "Heavy Armor"].indexOf(item.definition.type) >= 0 && item.equipped) hasArmor = true;
             });
             inventory.forEach((item, i) => {
-                // console.log('beyond: found inventory item ' + item.definition.name);
-
                 const isWeapon = typeof item.definition.damage === 'object' && item.definition.type !== 'Ammunition';
                 if (typeof item.definition.damage === 'object' && item.definition.type !== 'Ammunition') {
                     let sheetItem = {
@@ -1071,6 +1066,7 @@ class BeyondImporter extends Application {
                     sheetItem.data.weight.value = item.definition.weight;
                     sheetItem.data.strength.value = (item.definition.strengthRequirement == null ? 0 : item.definition.strengthRequirement).toString();
                     sheetItem.data.description.value = item.definition.description;
+                    sheetItem.data.stealth.value = item.definition.stealthCheck === 2;
                     item.definition.grantedModifiers.forEach((grantedMod) => {
                         if (grantedMod.type === 'set') {
                             switch (grantedMod.subType) {
@@ -1173,9 +1169,71 @@ class BeyondImporter extends Application {
             });
         }
 
+        // Check for unarmored defense
+        const unarmored = this._getObjects(character.modifiers, 'subType', 'unarmored-armor-class');
+        if (unarmored != null) { // Warforged Integrated Protection
+            unarmored.filter(ua => ua.componentTypeId == 306912077).forEach((ua, i) => {
+                let sheetItem = {
+                    img: "icons/mystery-man.png",
+                    name: "Integrated Protection",
+                    type: "equipment",
+                    data: {
+                        armor: {type: "Number", label: "Armor Value"},
+                        armorType: {type: "String", label: "Armor Type", value: "natural"},
+                        attuned: {type: "Boolean", label: "Attuned", value: false},
+                        description: {type: "String", label: "Description", value: ""},
+                        equipped: {type: "Boolean", label: "Equipped", value: true},
+                        price: {type: "String", label: "Price", value: 0},
+                        proficient: {type: "Boolean", label: "Proficient", value: true},
+                        quantity: {type: "Number", label: "Quantity", value: 1},
+                        source: {type: "String", label: "Source", value: ua.id.toString()},
+                        stealth: {type: "Boolean", label: "Stealth Disadvantage"},
+                        strength: {type: "String", label: "Required Strength", value: 0},
+                        weight: {type: "Number", label: "Weight", value: 0}
+                    }
+                };
+
+                if(ua.value == 6) {
+                    sheetItem.data.armorType.value = 'heavy';
+                    sheetItem.data.stealth.value = true;
+                    ua.value = 10 + parseInt(ua.value);
+                }
+                else if(ua.value == 3) {
+                    sheetItem.data.armorType.value = 'medium';
+                    ua.value = 10 + parseInt(ua.value);
+                }
+                ua.value += Math.floor((character.classes.reduce((total, c) => total + c.level, 0) + 7) / 4);
+
+                sheetItem.data.armor.value = ua.value;
+
+                let aac = this._getObjects(character, 'subType', 'armored-armor-class');
+                aac.forEach((aacb) => {
+                    sheetItem.data.armor.value += parseInt(aacb.value);
+                });
+
+                ac += sheetItem.data.armor.value;
+
+                hasArmor = true;
+            });
+        }
+
+        if (unarmored != null && !hasArmor) {
+            ac += 10 + Math.floor((this.getTotalAbilityScore(character, 2) - 10) / 2);
+            unarmored.forEach((ua, i) => {
+                if(ua.type != 'set') return;
+                if(ua.value == null) {
+                    ua.value = Math.floor((this.getTotalAbilityScore(character, ua.statId) - 10) / 2);
+                }
+
+                ac += ua.value;
+            });
+        }
+
         return {
             ac: ac,
-            items: items
+            items: items,
+            hasArmor: hasArmor,
+            hasShield: shieldEquipped
         };
     }
 
