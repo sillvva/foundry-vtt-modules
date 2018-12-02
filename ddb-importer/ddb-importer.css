@@ -14,3 +14,6 @@
 #actors.flexcolumn > .directory-footer > * {
     margin-top: 5px;
 }
+.dnd5e.actor-sheet .biography .editor-content span {
+    display: inline;
+}
