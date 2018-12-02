@@ -368,6 +368,11 @@ class BeyondImporter extends Application {
         this.parseItems(actorEntity, items);
     }
 
+    /**
+     * Get character resistances, immunities, and vulnerabilities
+     *
+     * @param {Object} character - Character JSON data string parsed as an object after import
+     */
     getDefemseAdjustments(character) {
         let conditionImmunities = [];
         let damageImmunities = [];
