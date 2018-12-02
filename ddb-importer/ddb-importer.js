@@ -139,10 +139,10 @@ class BeyondImporter extends Application {
         // Create new actor (GM only) if entity is not pre-defined
         if(opts.actor == null) {
             Actor5e.create({ name: data.character.name, type: 'character' }, true).then(actor => {
-                this.parseCharacterData(actor, data);
+                this.parseCharacterData(actor, data.character);
             });
         } else {
-            this.parseCharacterData(opts.actor, data);
+            this.parseCharacterData(opts.actor, data.character);
         }
     }
 
@@ -152,11 +152,10 @@ class BeyondImporter extends Application {
      * @param {String} actorEntity - The Actor5e entity that will be updated with the new data
      * @param {Object} data - Character JSON data string parsed as an object after import
      */
-    parseCharacterData(actorEntity, data) {
-        console.log(data);
+    parseCharacterData(actorEntity, character) {
+        console.log(character);
         let actor = Object.assign({}, actorEntity.data);
-        let character = data.character;
-        delete actor._id;
+        // delete actor._id;
 
         let items = [];
 
@@ -164,27 +163,30 @@ class BeyondImporter extends Application {
         let classSpells = features.spells;
         let biography = features.biography;
 
-        actor.img = character.avatarUrl;
-        actor.name = character.name;
+        let obj = {};
+
+        obj['img'] = character.avatarUrl;
+        obj['name'] = character.name;
 
         // Set Details
-        actor.data.details.level.value = features.level;
-        actor.data.details.race.value = character.race.fullName;
-        actor.data.details.alignment.value = this._getConfig('alignments', 'id', character.alignmentId).long;
-        actor.data.details.background.value = character.background.definition != null ? character.background.definition.name : (character.background.customBackground != null ? character.background.customBackground.name : '');
-        actor.data.details.xp.value = character.currentXp.toString();
+        obj['data.details.level.value'] = features.level;
+        obj['data.details.race.value'] = character.race.fullName;
+        obj['data.details.alignment.value'] = this._getConfig('alignments', 'id', character.alignmentId).long;
+        obj['data.details.background.value'] = character.background.definition != null ? character.background.definition.name : (character.background.customBackground != null ? character.background.customBackground.name : '');
+        obj['data.details.xp.value'] = character.currentXp.toString();
+        obj['data.details.biography.value'] = biography;
 
         // Set Attributes
-        actor.data.attributes.prof.value = Math.floor((features.level + 7) / 4);
-        actor.data.attributes.hd.value = features.level;
-        actor.data.attributes.hp.value = this.getHp(character).toString();
-        actor.data.attributes.hp.max = this.getHp(character).toString();
-        actor.data.attributes.spellcasting.value = '';
-        actor.data.attributes.speed.value = this.getSpeeds(character);
+        obj['data.attributes.prof.value'] = Math.floor((features.level + 7) / 4);
+        obj['data.attributes.hd.value'] = features.level;
+        obj['data.attributes.hp.value'] = this.getHp(character).toString();
+        obj['data.attributes.hp.max'] = this.getHp(character).toString();
+        obj['data.attributes.spellcasting.value'] = '';
+        obj['data.attributes.speed.value'] = this.getSpeeds(character);
 
         let inv = this.getInventory(character, actorEntity, features);
         items = items.concat(inv.items);
-        actor.data.attributes.ac.value = inv.ac;
+        obj['data.attributes.ac.value'] = inv.ac;
 
         // Set Traits
         let senses = [];
@@ -195,7 +197,7 @@ class BeyondImporter extends Application {
                 senses.push(name);
             }
         });
-        actor.data.traits.senses.value = senses.join(', ');
+        obj['data.traits.senses.value'] = senses.join(', ');
 
         // Set Abilities
         for (let abl in actor.data.abilities) {
@@ -208,16 +210,16 @@ class BeyondImporter extends Application {
                     profs.push(mod);
                 });
             }
-            if (profs.length > 0) { actor.data.abilities[abl].proficient = '1'; }
-            else { actor.data.abilities[abl].proficient = '0'; }
+            if (profs.length > 0) { obj['data.abilities.'+abl+'.proficient'] = '1'; }
+            else { obj['data.abilities.'+abl+'.proficient'] = '0'; }
 
-            actor.data.abilities[abl].value = this.getTotalAbilityScore(character, this._getConfig('abilities', 'short', abl).id).toString();
-            actor.data.abilities[abl].min = 0;
-            actor.data.abilities[abl].mod = Math.floor((actor.data.abilities[abl].value - 10) / 2);
-            actor.data.abilities[abl].save = Math.floor((actor.data.abilities[abl].value - 10) / 2);
+            obj['data.abilities.'+abl+'.value'] = this.getTotalAbilityScore(character, this._getConfig('abilities', 'short', abl).id).toString();
+            obj['data.abilities.'+abl+'.min'] = 0;
+            obj['data.abilities.'+abl+'.mod'] = Math.floor((obj['data.abilities.'+abl+'.value'] - 10) / 2);
+            obj['data.abilities.'+abl+'.save'] = Math.floor((obj['data.abilities.'+abl+'.value'] - 10) / 2);
 
-            if(actor.data.abilities[abl].proficient === '1') {
-                actor.data.abilities[abl].save += actor.data.attributes.prof.value;
+            if(obj['data.abilities.'+abl+'.proficient'] === '1') {
+                obj['data.abilities.'+abl+'.save'] += obj['data.attributes.prof.value'];
             }
         }
 
@@ -237,17 +239,17 @@ class BeyondImporter extends Application {
 
             items = items.concat([item]);
 
-            if (actor.data.attributes.spellcasting.value === '') {
+            if (obj['data.attributes.spellcasting.value'] === '') {
                 if (charClass.spellCastingAbilityId != null) {
-                    actor.data.attributes.spellcasting.value = this._getConfig('abilities', 'id', charClass.spellCastingAbilityId).short;
+                    obj['data.attributes.spellcasting.value'] = this._getConfig('abilities', 'id', charClass.spellCastingAbilityId).short;
                 } else if (charClass.subclassDefinition != null) {
                     if (charClass.subclassDefinition.spellCastingAbilityId != null) {
-                        actor.data.attributes.spellcasting.value = this._getConfig('abilities', 'id', charClass.subclassDefinition.spellCastingAbilityId).short;
+                        obj['data.attributes.spellcasting.value'] = this._getConfig('abilities', 'id', charClass.subclassDefinition.spellCastingAbilityId).short;
                     }
                 }
 
-                if(actor.data.attributes.spellcasting.value !== '') {
-                    actor.data.attributes.spelldc.value = 8 + actor.data.abilities[actor.data.attributes.spellcasting.value].mod + actor.data.attributes.prof.value;
+                if(obj['data.attributes.spellcasting.value'] !== '') {
+                    obj['data.attributes.spelldc.value'] = 8 + parseInt(obj['data.attributes.prof.value']) + parseInt(obj['data.abilities.'+obj['data.attributes.spellcasting.value']+'.mod']);
                 }
             }
         });
@@ -263,20 +265,22 @@ class BeyondImporter extends Application {
                 if (skillBon.value != null) {
                     bon = skillBon.value;
                 } else if (skillBon.statId != null) {
-                    bon = actor.data.abilities[this._getConfig('abilities', 'id', skillBon.statId).short].mod;
+                    bon = obj['data.abilities'+this._getConfig('abilities', 'id', skillBon.statId).short+'.mod'];
                 }
                 return total + bon;
-            }, 0) + (prof ? actor.data.attributes.prof.value + (exp ? actor.data.attributes.prof.value : 0) : 0);
+            }, 0) + (prof ? obj['data.attributes.prof.value'] + (exp ? obj['data.attributes.prof.value'] : 0) : 0);
 
             skill.value = (prof ? 1 + (exp ? 1 : 0) : 0);
-            skill.mod = actor.data.abilities[skill.ability].mod + bonus;
+            skill.mod = obj['data.abilities.'+skill.ability+'.mod'] + bonus;
 
             // passive perception
             if(skill.label === 'Perception') {
-                actor.data.traits.perception.value = 10 + skill.mod;
+                obj['data.traits.perception.value'] = 10 + skill.mod;
             }
 
-            actor.data.skills[skl] = skill;
+            for(let key in skill) {
+                obj['data.skills.'+skl+'.'+key] = skill[key];
+            }
         }
 
         // Set Spells
@@ -356,11 +360,11 @@ class BeyondImporter extends Application {
             items.push(spellItem);
         });
 
-        this.parseItems(actorEntity, items);
-        actorEntity.update(actor, true);
+        actorEntity.update(obj, true);
+        actorEntity.render(true);
 
         setTimeout(() => {
-            actorEntity.update({['data.details.biography.value']: biography}, true);
+            this.parseItems(actorEntity, items);
         }, 200);
     }
 
@@ -801,7 +805,7 @@ class BeyondImporter extends Application {
                 if (["Light Armor", "Medium Armor", "Heavy Armor"].indexOf(item.definition.type) >= 0 && item.equipped) hasArmor = true;
             });
             inventory.forEach((item, i) => {
-                console.log('beyond: found inventory item ' + item.definition.name);
+                // console.log('beyond: found inventory item ' + item.definition.name);
 
                 const isWeapon = typeof item.definition.damage === 'object' && item.definition.type !== 'Ammunition';
                 if (typeof item.definition.damage === 'object' && item.definition.type !== 'Ammunition') {
@@ -1129,13 +1133,11 @@ class BeyondImporter extends Application {
             actorEntity.createOwnedItem(items[i], true);
         }
 
-        setTimeout(() => {
-            if(items.length > i + 1) {
-                setTimeout(() => {
-                    this.parseItems(actorEntity, items, i + 1);
-                }, 200);
-            }
-        }, 200);
+        if(items.length > i + 1) {
+            setTimeout(() => {
+                this.parseItems(actorEntity, items, i + 1);
+            }, 100);
+        }
     }
 
     /**
@@ -1152,15 +1154,13 @@ class BeyondImporter extends Application {
             total = base + bonus,
             modifiers = this._getObjects(character, '', this._getConfig('abilities', 'id', scoreId).long.toLowerCase() + "-score");
         if (override > 0) total = override;
-        if (modifiers.length > 0) {
-            let used_ids = [];
-            for (let i = 0; i < modifiers.length; i++){
-                if (modifiers[i].type == 'bonus' && used_ids.indexOf(modifiers[i].id) == -1) {
-                    total += modifiers[i].value;
-                    used_ids.push(modifiers[i].id);
-                }
+        let usedIds = [];
+        modifiers.forEach((mod) => {
+            if (mod.type === 'bonus' && usedIds.indexOf(mod.id) === -1) {
+                total += mod.value;
+                usedIds.push(mod.id);
             }
-        }
+        });
 
         return total;
     }
