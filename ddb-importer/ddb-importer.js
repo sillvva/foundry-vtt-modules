@@ -194,10 +194,10 @@ class BeyondImporter extends Application {
         obj['data.traits.senses.value'] = this.getSenses(character).join(', ');
 
         // Set Currency
-        obj['data.traits.cp.value'] = character.currencies.cp;
-        obj['data.traits.sp.value'] = character.currencies.sp + 5 * character.currencies.ep;
-        obj['data.traits.gp.value'] = character.currencies.gp;
-        obj['data.traits.pp.value'] = character.currencies.pp;
+        // obj['data.traits.cp.value'] = character.currencies.cp;
+        // obj['data.traits.sp.value'] = character.currencies.sp + 5 * character.currencies.ep;
+        // obj['data.traits.gp.value'] = character.currencies.gp;
+        // obj['data.traits.pp.value'] = character.currencies.pp;
 
         // Set Resistances, Immunities, Vulnerabilities
         const defenses = this.getDefemseAdjustments(character);
@@ -230,6 +230,8 @@ class BeyondImporter extends Application {
             }
         }
 
+        let resources = 0;
+        const resourceTypes = ['primary', 'secondary'];
         // Set Class Levels, Spellcasting Ability
         character.classes.forEach((charClass) => {
             const item = {
@@ -259,6 +261,26 @@ class BeyondImporter extends Application {
                     obj['data.attributes.spelldc.value'] = 8 + parseInt(obj['data.attributes.prof.value']) + parseInt(obj['data.abilities.'+obj['data.attributes.spellcasting.value']+'.mod']);
                 }
             }
+
+            charClass.classFeatures
+                .filter(feature => feature.definition.limitedUse.length > 0)
+                .filter(feature => feature.definition.limitedUse[0].uses > 1)
+                .forEach(feature => {
+                    if(resources < 2) {
+                        let limitedUses = feature.definition.limitedUse;
+                        if (limitedUses[0].level == null) {
+                            obj['data.resources.'+resourceTypes[resources]+'.label'] = feature.definition.name;
+                            obj['data.resources.'+resourceTypes[resources]+'.value'] = limitedUses[0].uses;
+                            obj['data.resources.'+resourceTypes[resources]+'.max'] = limitedUses[0].uses;
+                        } else {
+                            limitedUses = limitedUses.filter(lu => lu.level != null && lu.level <= charClass.level).pop();
+                            obj['data.resources.'+resourceTypes[resources]+'.label'] = feature.definition.name;
+                            obj['data.resources.'+resourceTypes[resources]+'.value'] = limitedUses.uses;
+                            obj['data.resources.'+resourceTypes[resources]+'.max'] = limitedUses.uses;
+                        }
+                        resources++;
+                    }
+                });
         });
 
         // Set Skills / Passive Perception
