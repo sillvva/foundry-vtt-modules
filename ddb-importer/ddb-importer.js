@@ -83,7 +83,7 @@ class BeyondImporter extends Application {
         out += '</ol>';
         out += '<p><textarea class="ddb-data form-control" cols="30" rows="5" autofocus placeholder="Paste your character data here"></textarea></p>';
 
-        console.log(options.actor);
+        // console.log(options.actor);
 
         const d = new Dialog({
             title: "D&D Beyond Character Import",
@@ -171,7 +171,7 @@ class BeyondImporter extends Application {
         // Set Details
         obj['data.details.level.value'] = features.level;
         obj['data.details.race.value'] = (character.race.subRaceShortName == null || character.race.subRaceShortName === '' ? '' : character.race.subRaceShortName+' ')+character.race.baseName;
-        obj['data.details.alignment.value'] = this._getConfig('alignments', 'id', character.alignmentId).long;
+        if (character.alignmentId != null) obj['data.details.alignment.value'] = this._getConfig('alignments', 'id', character.alignmentId).long;
         obj['data.details.background.value'] = character.background.definition != null ? character.background.definition.name : (character.background.customBackground != null ? character.background.customBackground.name : '');
         obj['data.details.xp.value'] = character.currentXp.toString();
         obj['data.details.biography.value'] = biography;
@@ -891,6 +891,7 @@ class BeyondImporter extends Application {
         });
 
         let ac = 0;
+        let dexMod = 0;
         let weaponCritRange = 20;
         let criticalRange = 20;
         let items = [];
@@ -1130,6 +1131,14 @@ class BeyondImporter extends Application {
                         sheetItem.data.armorType.value = this._getConfig('equipmentTypes', 'long', item.definition.type).short;
                     }
 
+                    if (item.definition.type === 'Light Armor' && item.equipped && dexMod === 0) {
+                        dexMod = this.getAbilityMod(this.getTotalAbilityScore(character, 2));
+                    }
+
+                    if (item.definition.type === 'Medium Armor' && item.equipped && dexMod === 0) {
+                        dexMod = this.getAbilityMod(this.getTotalAbilityScore(character, 2));
+                    }
+
                     if (sheetItem.data.equipped.value) {
                         ac += sheetItem.data.armor.value;
                     }
@@ -1248,7 +1257,8 @@ class BeyondImporter extends Application {
         }
 
         if (unarmored != null && !hasArmor) {
-            ac += 10 + Math.floor((this.getTotalAbilityScore(character, 2) - 10) / 2);
+            dexMod = this.getAbilityMod(this.getTotalAbilityScore(character, 2));
+            ac += 10;
             unarmored.forEach((ua, i) => {
                 if(ua.type != 'set') return;
                 if(ua.value == null) {
@@ -1258,6 +1268,8 @@ class BeyondImporter extends Application {
                 ac += ua.value;
             });
         }
+
+        ac += dexMod;
 
         return {
             ac: ac,
@@ -1327,8 +1339,13 @@ class BeyondImporter extends Application {
         return total;
     }
 
+    getAbilityMod(score) {
+        return Math.floor((score - 10) / 2);
+    }
+
     /**
-     * Return an array of objects according to key, value, or key and value matching, optionally ignoring objects in array of names
+     * Return an array of objects according to key, value, or key and value matching,
+     * optionally ignoring objects in array of names
      *
      * @param {Object} obj - An object to iterate through searching for objects containing a key/value pair
      * @param {String} key - An object parameter key to search by
