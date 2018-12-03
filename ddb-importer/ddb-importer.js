@@ -1189,33 +1189,24 @@ class BeyondImporter extends Application {
 
                 const isTool = item.definition.subType === 'Tool';
                 if (isTool) {
-                    const proficient = this
-                        ._getObjects(character.modifiers, 'friendlySubtypeName', item.definition.name)
-                        .filter(mod => mod.type === 'proficiency' && mod.isGranted).length > 0;
-                    let sheetItem = {
-                        img: 'icons/mystery-man.png',
-                        name: item.definition.name,
-                        type: 'tool',
-                        data: {
-                            ability: {type: "String", label: "Default Ability"},
-                            description: {type: "String", label: "Description", value: item.definition.description},
-                            price: {type: "String", label: "Price", value: item.definition.cost},
-                            proficient: {type: "Boolean", label: "Proficient", value: proficient},
-                            quantity: {type: "Number", label: "Quantity", value: 1},
-                            source: {type: "String", label: "Source", value: item.id.toString()},
-                            weight: {type: "Number", label: "Weight", value: item.definition.weight}
-                        }
-                    };
+                    character.customProficiencies.filter(prof => prof.name === item.definition.name && prof.statId != null).forEach(prof => {
+                        let sheetItem = {
+                            img: 'icons/mystery-man.png',
+                            name: this._getConfig('abilities', 'id', prof.statId).long + ' (' +item.definition.name + ')',
+                            type: 'tool',
+                            data: {
+                                ability: {type: "String", label: "Default Ability", value: this._getConfig('abilities', 'id', prof.statId).short},
+                                description: {type: "String", label: "Description", value: item.definition.description},
+                                price: {type: "String", label: "Price", value: item.definition.cost},
+                                proficient: {type: "Boolean", label: "Proficient", value: !(prof.proficiencyLevel === 0)},
+                                quantity: {type: "Number", label: "Quantity", value: 1},
+                                source: {type: "String", label: "Source", value: item.id.toString()},
+                                weight: {type: "Number", label: "Weight", value: item.definition.weight}
+                            }
+                        };
 
-                    character.customProficiencies.filter(prof => prof.name === item.definition.name).forEach(prof => {
-                        sheetItem.data.proficient.value = !(prof.proficiencyLevel === 0);
-
-                        if (prof.statId !== null) {
-                            sheetItem.data.ability.value = this._getConfig('abilities', 'id', prof.statId).short;
-                        }
+                        items.push(sheetItem);
                     });
-
-                    items.push(sheetItem);
                 }
 
                 if (!isWeapon && !isArmor && !isConsumable && !isTool) {
