@@ -1,6 +1,6 @@
 /**
  * @author Matt DeKok <Sillvva>
- * @version 0.1.1
+ * @version 0.1.2
  */
 
 class BeyondImporter extends Application {
