@@ -2,6 +2,10 @@
 
 To use the the tool, use the button available in the Actor List (for GMs only) or in the Actor Sheet header (for all players). Instructions are provided in the prompt.
 
+### Video Demo by 8bit_noise
+
+[![Video Demo](https://i.imgur.com/JU1rpIL.png)](https://www.youtube.com/watch?v=n33Xsa72AH4)
+
 ### Installation Instructions
 
 To install a module, follow these instructions:
