@@ -1,6 +1,6 @@
 /**
  * @author Matt DeKok <Sillvva>
- * @version 0.1.2
+ * @version 0.1.3
  */
 
 class BeyondImporter extends Application {
@@ -10,6 +10,7 @@ class BeyondImporter extends Application {
 
         this.hookActorSheet();
         this.hookActorList();
+        this.hookToolbar5eReady();
     }
 
     /**
@@ -17,7 +18,8 @@ class BeyondImporter extends Application {
      */
     hookActorSheet() {
         Hooks.on('renderActor5eSheet', (app, html, data) => {
-            // console.log(data);
+            // check existence of Enhancement Suite
+            if($('.actor-sheet-toolbar').length > 0) return;
             if(!data.owner) return;
 
             const windowHeader = html.parent().parent().find('.window-header');
@@ -40,11 +42,28 @@ class BeyondImporter extends Application {
      */
     hookActorList() {
         Hooks.on('renderActorList', (app, html, data) => {
-            // console.log(game);
             const importButton = $('<button class="import-dndbeyond-list" style="min-width: 96%;"><span class="fas fa-file-import"></span> Beyond Import</button>');
 
             html.find('.import-dndbeyond-list').remove();
             html.find('.directory-footer').append(importButton);
+
+            // Handle button clicks
+            importButton.click(ev => {
+                ev.preventDefault();
+                this.importDialog({ actor: null });
+            });
+        });
+    }
+
+    /**
+     * Hook into the render call for the Enhancement Suite's toolbar5eReady to add an extra button
+     */
+    hookToolbar5eReady() {
+        Hooks.on('toolbar5eReady', (html) => {
+            const importButton = $('<button class="btn btn-small btn-dark import-dndbeyond-sheet" style="min-width: 96%;"><span class="fas fa-file-import"></span> D&D Beyond<br>Character Import</button>');
+
+            $('.import-dndbeyond-sheet').remove();
+            html.find('.btn-macros').after(importButton);
 
             // Handle button clicks
             importButton.click(ev => {
@@ -1404,9 +1423,6 @@ class BeyondImporter extends Application {
     }
 }
 
-let ddbi = new BeyondImporter();
-ddbi.render();
-
 CONFIG.BeyondImporter = {
     abilities: [
         { id: 1, short: 'str', long: 'Strength' },
@@ -1508,3 +1524,6 @@ CONFIG.BeyondImporter = {
         { id: 15, subType: 'Unconscious' }
     ]
 };
+
+let ddbi = new BeyondImporter();
+ddbi.render();
