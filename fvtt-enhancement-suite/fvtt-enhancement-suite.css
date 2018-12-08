@@ -1,0 +1,255 @@
+* {
+    box-sizing: border-box;
+}
+
+.flex-3 {
+    flex: 3;
+}
+.flex-2 {
+    flex: 2;
+}
+.flex-1 {
+    flex: 1;
+}
+
+/**
+ * Actor Sheet Toolbar
+ */
+.dnd5e.actor-sheet .sheet-body .tab {
+    flex: 1 0 !important;
+}
+.sheet-sidebar {
+    display: flex;
+    flex-direction: column;
+}
+.sheet-sidebar img.sheet-profile {
+    flex: 0 1 250px;
+}
+.sheet-sidebar nav.sheet-tabs {
+    margin-top: 5px;
+    flex: 0 1 32px;
+}
+.sheet-sidebar .tab {
+    flex-grow: 1;
+    max-height: 432px;
+    overflow-y: auto;
+}
+.actor-sheet-toolbar .toolbar-header {
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    height: 30px;
+    background: rgba(0,0,0,0.7);
+    border-radius: 5px 5px 0 0;
+    padding: 6px 8px;
+    color: #fff;
+    text-shadow: 1px 1px 1px #000;
+}
+.actor-sheet-toolbar {
+    position: absolute;
+    height: 100%;
+    top: 0;
+    right: 100%;
+    padding: 38px 8px 0;
+    background: rgba(255,255,255,0.3);
+    border-radius: 5px 5px 0 5px;
+    overflow-y: auto;
+}
+.actor-sheet-toolbar .btn {
+    display: inline-block;
+    width: 100%;
+    margin-bottom: 8px;
+    font-weight: 400;
+    text-align: left;
+    white-space: nowrap;
+    vertical-align: middle;
+    -webkit-user-select: none;
+    -moz-user-select: none;
+    -ms-user-select: none;
+    user-select: none;
+    border: 1px solid transparent;
+    padding: .375rem .75rem;
+    font-size: 1rem;
+    line-height: 1.5;
+    border-radius: .25rem;
+    transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+}
+.actor-sheet-toolbar .btn-dark {
+    color: #fff;
+    background-color: #343a40;
+    border-color: #343a40;
+}
+.actor-sheet-toolbar .btn-dark:hover {
+    color: #fff;
+    background-color: #23272b;
+    border-color: #1d2124;
+}
+.btn:focus, .btn:hover {
+    text-decoration: none;
+}
+
+/**
+ * Macro Configuration Dialog
+ */
+.macro-sheet {
+    border: 1px solid #ccc;
+    border-radius: 5px 5px 0 0;
+}
+.macro-sheet .macro-edit.hide {
+    display: none;
+}
+.macro-sheet .macros {
+    max-height: 500px;
+    overflow-y: auto;
+    overflow-x: hidden;
+}
+.macro-sheet .macro {
+    padding: 5px;
+    border-bottom: 1px solid #ccc;
+}
+.macro-sheet .macro-label, .macro-sheet .macro-content {
+    margin: 5px 0;
+}
+.macro-sheet .macro input, .macro-sheet .macro textarea, .macro-sheet .macro button {
+    width: 100%; min-width: 100%; max-width: 100%;
+}
+.macro-sheet .macro textarea {
+    min-height: 64px;
+}
+.macro-sheet .macro-action-bar {
+    display: flex; margin: 0 -5px;
+    padding: 5px;
+}
+.macro-sheet .macro-action-bar * {
+    margin: 5px; flex: 1;
+}
+.macro-sheet .macro-list {
+    display: flex;
+    padding: 8px 4px;
+}
+.macro-sheet .macro-list .macro-list-name {
+    flex: 1 0;
+}
+.macro-sheet .macro-list .macro-list-btn {
+    padding-left: 10px;
+}
+
+/**
+ * Weapons Configuration
+ */
+.macro-sheet .weapons-header, .macro-sheet .weapon {
+    display: flex;
+    padding: 5px 0;
+    border-bottom: 1px solid #ccc;
+}
+.macro-sheet .weapons-header {
+    font-weight: bold; background: rgba(0,0,0,0.15)
+}
+.macro-sheet .weapon-enable {
+    max-width: 20px;
+}
+.macro-sheet .weapons-header *, .macro-sheet .weapon * {
+    flex: 1; text-align: center;
+}
+.macro-sheet .weapon-name {
+    flex: 2; text-align: left;
+}
+
+/**
+ * Spells Configuration
+ */
+.macro-sheet .spells-header, .macro-sheet .spell {
+    display: flex;
+    padding: 5px 0;
+    border-bottom: 1px solid #ccc;
+}
+.macro-sheet .spells-header {
+    font-weight: bold; background: rgba(0,0,0,0.15)
+}
+.macro-sheet .spell-enable {
+    max-width: 20px;
+}
+.macro-sheet .spells-header *, .macro-sheet .spell * {
+    flex: 1; text-align: center;
+}
+.macro-sheet .spell-name {
+    flex: 2; text-align: left;
+}
+
+/**
+ * Saving Throws Configuration
+ */
+.save-toggles {
+    width: 600px;
+    display: flex;
+    flex-wrap: wrap;
+}
+.save-toggles .enable-all {
+    flex: 3; min-width: 90%;
+    border-bottom: 1px solid #ccc;
+}
+.save-toggles .enable-one {
+    flex: 1; min-width: 30%;
+}
+.save-toggles label {
+    padding: 5px; width: 100%; display: block;
+}
+
+/**
+ * Tools Configuration
+ */
+.macro-sheet .tools-header, .macro-sheet .tool {
+    display: flex;
+    padding: 5px 0;
+    border-bottom: 1px solid #ccc;
+}
+.macro-sheet .tools-header {
+    font-weight: bold; background: rgba(0,0,0,0.15);
+}
+.macro-sheet .tool-enable {
+    max-width: 20px;
+}
+.macro-sheet .tools-header *, .macro-sheet .tool * {
+    flex: 1; text-align: center;
+}
+.macro-sheet .tool-name {
+    flex: 2; text-align: left;
+}
+
+/**
+ * Macro Bar
+ */
+.macro-bar {
+    position: absolute; overflow: hidden;
+    padding: 8px 0 0 8px; border-radius: 5px; z-index: 70;
+}
+.macro-bar.macro-bar-bottom {
+    bottom: 5px; left: 230px; right: 315px;
+    background: rgba(0,0,0,0.4);
+}
+.macro-bar > * {
+    float: left; width: auto; margin: 0 8px 8px 0;
+}
+
+/**
+ * Saving Throw Prompt
+ */
+.saves-prompt {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 5px;
+}
+.saves-prompt button {
+    width: calc(100% / 3 - 10px);
+    margin: 5px;
+}
+
+/**
+ * List Prompt
+ */
+select.list-prompt {
+    width: 100%;
+    margin-bottom: 20px;
+    font-size: large;
+}

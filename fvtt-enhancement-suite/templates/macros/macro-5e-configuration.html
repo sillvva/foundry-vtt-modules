@@ -1,0 +1,149 @@
+<form class="dnd5e macro-sheet {{cssClass}}" autocomplete="off" data-actor-id="{{actor._id}}">
+    <nav class="sheet-tabs tabs" data-tab-container="primary">
+        {{#if hasMacros.weaponsSpells}}
+        <a class="item flex-1 active" data-tab="weapons-spells">Weapons&nbsp;&amp;&nbsp;Spells</a>
+        {{/if}}
+        <a class="item flex-1" data-tab="saving-throws">Saving&nbsp;Throws</a>
+        <!--<a class="item flex-1" data-tab="ability-checks">Ability&nbsp;Checks</a>-->
+        {{#if hasMacros.tools}}
+        <a class="item flex-1" data-tab="tools">Tools</a>
+        {{/if}}
+        <a class="item flex-1" data-tab="custom">Custom</a>
+    </nav>
+
+    <div class="tab active" data-tab="weapons-spells">
+        <div class="macros">
+            {{#if hasMacros.weapons}}
+            <div class="weapons-header">
+                <div class="weapon-enable">&nbsp;</div>
+                <div class="weapon-name">Weapon</div>
+                <div class="weapon-range">Range</div>
+                <div class="weapon-hit">To Hit</div>
+                <div class="weapon-damage">Damage</div>
+            </div>
+            {{#each macros.weapons as |weapon wid|}}
+            <div class="weapon item" data-weapon-id="{{weapon.id}}">
+                <div class="weapon-enable"><input type="checkbox" class="enable" {{checked weapon.enabled}} /></div>
+                <div class="weapon-name">{{weapon.name}}</div>
+                <div class="weapon-range">{{weapon.data.range.value}}</div>
+                <div class="weapon-hit">{{weapon.data.hit}}</div>
+                <div class="weapon-damage">{{weapon.data.damage.value}}</div>
+            </div>
+            {{/each}}
+            {{/if}}
+            {{#if hasMacros.weapons}}
+            <div class="spells-header">
+                <div class="spell-enable">&nbsp;</div>
+                <div class="spell-name">Spell</div>
+                <div class="spell-level">Level</div>
+                <div class="spell-school">School</div>
+                <div class="spell-extra">&nbsp;</div>
+            </div>
+            {{#each macros.spells as |spell sid|}}
+            <div class="spell item" data-spell-id="{{spell.id}}">
+                <div class="spell-enable"><input type="checkbox" class="enable" {{checked spell.enabled}} /></div>
+                <div class="spell-name">{{spell.name}}</div>
+                <div class="spell-level">{{spell.data.level.value}}</div>
+                <div class="spell-school">{{spell.school}}</div>
+                <div class="spell-extra">&nbsp;</div>
+            </div>
+            {{/each}}
+            {{/if}}
+        </div>
+    </div>
+
+    <div class="tab" data-tab="saving-throws">
+        <div class="macros">
+            <div class="save-toggles">
+                <div class="enable-all">
+                    <label>
+                        <input type="checkbox" class="prompt" name="Saving Throws" {{checked macros.saves.prompt}}>
+                        Prompt (Creates one macro that prompts which abililty to use)
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="str" name="STR Save" {{checked macros.saves.str}}>
+                        Strength
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="dex" name="DEX Save" {{checked macros.saves.dex}}>
+                        Dexterity
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="con" name="CON Save" {{checked macros.saves.con}}>
+                        Constitution
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="int" name="INT Save" {{checked macros.saves.int}}>
+                        Intelligence
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="wis" name="WIS Save" {{checked macros.saves.wis}}>
+                        Wisdom
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="cha" name="CHA Save" {{checked macros.saves.cha}}>
+                        Charisma
+                    </label>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="tab" data-tab="ability-checks">
+
+    </div>
+
+    <div class="tab" data-tab="tools">
+        <div class="macros">
+            <div class="tools-header">
+                <div class="tool-enable">&nbsp;</div>
+                <div class="tool-name">Tool</div>
+            </div>
+            {{#each macros.tools as |tool tid|}}
+            <div class="tool item" data-tool-id="{{tool.id}}">
+                <div class="tool-enable"><input type="checkbox" class="enable" {{checked tool.enabled}} /></div>
+                <div class="tool-name">{{tool.name}}</div>
+            </div>
+            {{/each}}
+        </div>
+    </div>
+
+    <div class="tab" data-tab="custom">
+        <div class="macros">
+            {{#each macros.custom as |macro mid|}}
+            <div class="macro">
+                <div class="macro-list">
+                    <div class="macro-list-name">
+                        {{macro.label}}
+                    </div>
+                    <a class="macro-list-btn fas fa-edit"></a>
+                    <a class="macro-list-btn fas fa-times"></a>
+                </div>
+                <div class="macro-edit hide">
+                    <div class="macro-label">
+                        <input type="text" name="label" value="{{macro.label}}" placeholder="Macro Name" data-type="String" />
+                    </div>
+                    <div class="macro-content">
+                        <textarea name="content" name="content" value="{{macro.content}}" data-type="String">{{macro.content}}</textarea>
+                    </div>
+                </div>
+            </div>
+            {{/each}}
+        </div>
+        <div class="macro-action-bar">
+            <button class="new-custom-macro btn btn-dark" role="button">Add Macro</button>
+        </div>
+    </div>
+</form>
