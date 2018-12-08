@@ -59,6 +59,7 @@
 .actor-sheet-toolbar .btn {
     display: inline-block;
     width: 100%;
+    min-width: 96%;
     margin-bottom: 8px;
     font-weight: 400;
     text-align: left;
