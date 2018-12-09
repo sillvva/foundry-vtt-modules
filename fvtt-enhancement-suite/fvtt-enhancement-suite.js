@@ -437,7 +437,7 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} parsed - previously parsed queries
      */
     parsePromptTags(message, resolve, parsed = {}) {
-        const p = message.match(/\?\{(\[(?<listType>(list|checkbox|radio))\])?(?<query>[^\|]+)\|?(?<list>([^,\}\|]+,[^\|\}]+\|?)+)?(?<defaultValue>[^\}]+)?\}/i);
+        const p = message.match(/\?{(\[(?<listType>(list|checkbox|radio))\])?(?<query>[^\|]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
             resolve(message);
         } else {
