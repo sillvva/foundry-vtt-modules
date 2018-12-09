@@ -420,6 +420,9 @@ class FVTTEnhancementSuite extends Application {
      *
      * @example <caption>Checkbox examples</caption>
      * ?{[checkbox]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+     * // Selected options can be referenced later like this.
+     * // If option was not selected, this tag will be replaced with an empty string.
+     * ?{:option 1 label}
      *
      * @example <caption>Repeating a query to get the same value multiple times</caption>
      * ?{Query} // prompts for a text input
@@ -437,7 +440,7 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} parsed - previously parsed queries
      */
     parsePromptTags(message, resolve, parsed = {}) {
-        const p = message.match(/\?{(\[(?<listType>(list|checkbox|radio))\])?(?<query>[^\|]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
+        const p = message.match(/\?{(?<optionReference>:)?(\[(?<listType>(list|checkbox|radio))(\|(?<optionDelimiter>([^\]]+)?))?\])?(?<query>[^\|]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
             resolve(message);
         } else {
@@ -446,6 +449,8 @@ class FVTTEnhancementSuite extends Application {
             const query = p.groups.query.trim();
             const list = p.groups.list || '';
             const defaultValue = p.groups.defaultValue;
+            const optionReference = p.groups.optionReference;
+            const optionDelimiter = p.groups.optionDelimiter || ', ';
 
             if (list) {
                 let html = '<p>'+query+'</p>';
@@ -471,7 +476,11 @@ class FVTTEnhancementSuite extends Application {
                 }
 
                 if (parsed[query]) {
+                    // Use previous input for repeated queries and selected options
                     this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
+                } else if(optionReference) {
+                    // This is a refrence to a selection option, but the option was not selected. Replace with an empty string.
+                    this.parsePromptTags(message.replace(tag, ''), resolve, parsed);
                 } else {
                     new Dialog({
                         title: "Macro Configuration",
@@ -487,8 +496,11 @@ class FVTTEnhancementSuite extends Application {
                                         this.parsePromptTags(message.replace(tag, input), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
-                                        $(inputTag).serializeArray().forEach(item => { selected.push(item.value) });
-                                        const input = selected.join(', ');
+                                        $(inputTag).serializeArray().forEach(item => { 
+                                            selected.push(item.value) 
+                                            parsed[item.name] = item.value;
+                                        });
+                                        const input = selected.join(optionDelimiter);
                                         parsed[query] = input;
                                         this.parsePromptTags(message.replace(tag, input), resolve, parsed);
                                     }
