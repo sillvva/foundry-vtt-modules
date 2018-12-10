@@ -329,8 +329,9 @@ class FVTTEnhancementSuite extends Application {
                     if(macro.type === 'custom') {
                         if(!macro.content) return;
                         let message = duplicate(macro.content);
-                        this.parsePrompts(message).then(parsedMessage => {
+                        this.parsePrompts(message).then((parsedMessage, parsedReferences) => {
                             let message = parsedMessage;
+                            message = this.parsePromptOptionReferences(message, parsedReferences);
                             message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
                             const parser = new InlineDiceParser(message);
                             message = parser.parse();
@@ -421,9 +422,13 @@ class FVTTEnhancementSuite extends Application {
                     if(print.trim() === 'result') {
                         message = message.replace(m[0], roll.result);
                     } else if(print.trim() === 'crit') {
-                        if(options.length === 2 && !isNaN(parseInt(options[0])) && !isNaN(parseInt(options[1]))) {
+                        if(options.length === 2 && !isNaN(parseInt(options[0]))) {
                             const die = roll.rolls[parseInt(options[0]) - 1];
-                            if(die ? die.total >= parseInt(options[1]) : false) {
+                            let critRange = die.sides;
+                            if(!isNaN(parseInt(options[1]))) {
+                                critRange = parseInt(options[1]);
+                            }
+                            if(die ? die.total >= critRange : false) {
                                 message = message.replace(m[0], print);
                             } else {
                                 message = message.replace(m[0], '');
@@ -492,27 +497,18 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} parsed - previously parsed queries
      */
     parsePromptTags(message, resolve, parsed = {}) {
-        const p = message.match(/\?{(?<optionReference>:)?(\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\|([^\]]+)?)?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
+        const p = message.match(/\?{(?!:)(\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\|([^\]]+)?)?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
-            resolve(message);
+            resolve(message, parsed);
         } else {
             const tag = p[0];
             const listType = p.groups.listType || 'list';
             const query = p.groups.query.trim();
             const list = p.groups.list;
             const defaultValue = p.groups.defaultValue;
-            const optionReference = p.groups.optionReference;
             const optionDelimiter = (p.groups.optionDelimiter || '|, ').substr(1);
             
-            if (optionReference) {
-                if (parsed[query]) {
-                    // Use previous input for repeated queries and selected options
-                    this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
-                } else if(optionReference) {
-                    // This is a reference to a selection option, but the option was not selected. Replace with an empty string.
-                    this.parsePromptTags(message.replace(tag, ''), resolve, parsed);
-                }
-            } else if (list) {
+            if (list) {
                 let html = '<p>'+query+'</p>';
                 let inputTag = '';
                 if (listType === 'list') {
@@ -521,7 +517,7 @@ class FVTTEnhancementSuite extends Application {
                     html += '<p><select class="list-prompt" query="'+query.replace(/"/g, '\\"')+'">';
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
-                        html += '<option value="'+parts[1].trim().replace(/"/g, '\\"')+'">'+parts[0].trim()+'</option>'
+                        html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'">'+parts[0].trim()+'</option>'
                     });
                     html += '</select></p>';
                 } else if (listType === 'checkbox' || listType === 'radio') {
@@ -530,7 +526,7 @@ class FVTTEnhancementSuite extends Application {
                     html += '<form class="list-prompt">';
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
-                        html += '<p><label><input type="'+listType+'" name="'+parts[0].trim().replace(/"/g, '\\"')+'" value="'+parts[1].trim().replace(/"/g, '\\"')+'" /> '+parts[0].trim()+'</label></p>'
+                        html += '<p><label><input type="'+listType+'" name="'+parts[0].trim().replace(/"/g, '\\"')+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" /> '+parts[0].trim()+'</label></p>'
                     });
                     html += '</form>';
                 }
@@ -549,17 +545,16 @@ class FVTTEnhancementSuite extends Application {
                                 callback: () => {
                                     if (listType === 'list') {
                                         const input = $(inputTag).val();
-                                        parsed[query] = input;
+                                        parsed[query] = [input];
                                         this.parsePromptTags(message.replace(tag, input), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
                                         $(inputTag).serializeArray().forEach(item => { 
-                                            selected.push(item.value) 
-                                            parsed[item.name] = item.value;
+                                            selected.push(item.value.split(',')[0]) 
+                                            parsed[item.name] = item.value.split(',');
                                         });
-                                        console.log(optionDelimiter);
                                         const input = selected.join(optionDelimiter);
-                                        parsed[query] = input;
+                                        parsed[query] = [input];
                                         this.parsePromptTags(message.replace(tag, input), resolve, parsed);
                                     }
                                 }
@@ -569,8 +564,31 @@ class FVTTEnhancementSuite extends Application {
                 }
             } else {
                 const input = parsed[query] || prompt(query, defaultValue != null ? defaultValue.trim() : '');
-                parsed[query] = input;
+                parsed[query] = [input];
                 this.parsePromptTags(message.replace(tag, input || ''), resolve, parsed);
+            }
+        }
+    }
+    
+    parsePromptOptionReferences(message, parsed) {
+        const p = message.match(/\?{:(?<query>[^\|}]+)\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
+        if(!p) {
+            return message;
+        } else {
+            const tag = p[0];
+            const query = p.groups.query.trim();
+            const defaultValue = p.groups.defaultValue || '1';
+            
+            if (parsed[query]) {
+                // Use previous input for repeated queries and selected options
+                let defaultParsed = 0;
+                if(!isNaN(parseInt(defaultValue) || '1')) {
+                    defaultParsed = parseInt(defaultValue) - 1;
+                }
+                return this.parsePromptOptionReferences(message.replace(tag, parsed[query][defaultParsed]), parsed);
+            } else {
+                // This is a reference to a selection option, but the option was not selected. Replace with an empty string.
+                return this.parsePromptOptionReferences(message.replace(tag, ''), parsed);
             }
         }
     }
