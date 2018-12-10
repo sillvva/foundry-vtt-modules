@@ -421,14 +421,21 @@ class FVTTEnhancementSuite extends Application {
                     if(print.trim() === 'result') {
                         message = message.replace(m[0], roll.result);
                     } else if(print.trim() === 'crit') {
-                        if(options.length === 2) {
-                            if(!isNaN(parseInt(options[0])) && !isNaN(parseInt(options[1]))) {
-                                const crit = roll.rolls.find(r => r.sides === parseInt(options[0]) && r.total >= parseInt(options[1]));
-                                if(crit) {
-                                    message = message.replace(m[0], print);
-                                } else {
-                                    message = message.replace(m[0], '');
-                                }
+                        if(options.length === 2 && !isNaN(parseInt(options[0])) && !isNaN(parseInt(options[1]))) {
+                            const die = roll.rolls[parseInt(options[0]) - 1];
+                            if(die ? die.total >= parseInt(options[1]) : false) {
+                                message = message.replace(m[0], print);
+                            } else {
+                                message = message.replace(m[0], '');
+                            }
+                        } else {
+                            message = message.replace(m[0], '');
+                        }
+                    } else if(print.trim() === 'fumble') {
+                        if(options.length === 1 && !isNaN(parseInt(options[0]))) {
+                            const die = roll.rolls[parseInt(options[0]) - 1];
+                            if(die ? die.total === 1 : false) {
+                                message = message.replace(m[0], print);
                             } else {
                                 message = message.replace(m[0], '');
                             }
@@ -436,7 +443,7 @@ class FVTTEnhancementSuite extends Application {
                             message = message.replace(m[0], '');
                         }
                     } else {
-                        message = message.replace(m[0], print);
+                        message = message.replace(m[0], '');
                     }
                 }
             }
