@@ -544,9 +544,11 @@ class FVTTEnhancementSuite extends Application {
                                 label: "OK",
                                 callback: () => {
                                     if (listType === 'list') {
-                                        const input = $(inputTag).val();
-                                        parsed[query] = [input];
-                                        this.parsePromptTags(message.replace(tag, input), resolve, parsed);
+                                        const inputLabel = $(inputTag+' option:selected').html();
+                                        const inputValue = $(inputTag+' option:selected').val();
+                                        parsed[inputLabel] = inputValue.split(',');
+                                        parsed[query] = [inputValue.split(',')[0]];
+                                        this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
                                         $(inputTag).serializeArray().forEach(item => { 
