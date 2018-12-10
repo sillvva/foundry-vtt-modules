@@ -107,7 +107,6 @@ Parse a message for input requests. Prompt tags with the same query will only pr
 ?{Query|default value (optional)}
 ```
 
-
 <caption>Dropdown examples</caption>
 
 ```
@@ -121,10 +120,18 @@ Parse a message for input requests. Prompt tags with the same query will only pr
 ?{[radio]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
 ```
 
-<caption>Checkbox example</caption>
+<caption>Checkbox examples</caption>
 
 ```
+// A normal example. Returns a comma-separated list of selected options
 ?{[checkbox]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+// The delimiter that separates the selected options can be specified
+?{[checkbox|+]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+// Or it can be removed
+?{[checkbox|]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+
+// A selected option can be referenced again later. Returns "option 1 value" if option 1 was selected.
+?{:option 1 label}
 ```
 
 <caption>Repeating a query to get the same value multiple times</caption>
