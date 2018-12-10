@@ -440,7 +440,7 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} parsed - previously parsed queries
      */
     parsePromptTags(message, resolve, parsed = {}) {
-        const p = message.match(/\?{(?<optionReference>:)?(\[(?<listType>(list|checkbox|radio))(\|(?<optionDelimiter>([^\]]+)?))?\])?(?<query>[^\|]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
+        const p = message.match(/\?{(?<optionReference>:)?(\[(?<listType>(list|checkbox|radio))(\|(?<optionDelimiter>([^\]]+)?))?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
             resolve(message);
         } else {
@@ -452,7 +452,14 @@ class FVTTEnhancementSuite extends Application {
             const optionReference = p.groups.optionReference;
             const optionDelimiter = p.groups.optionDelimiter || ', ';
 
-            if (list) {
+            if (optionReference) {
+                if (parsed[query]) {
+                    // Use previous input for repeated queries and selected options
+                    this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
+                } else {
+                    this.parsePromptTags(message.replace(tag, ''), resolve, parsed);
+                }
+            } else if (list) {
                 let html = '<p>'+query+'</p>';
                 let inputTag = '';
                 if (listType === 'list') {
@@ -464,7 +471,16 @@ class FVTTEnhancementSuite extends Application {
                         html += '<option value="'+parts[1].trim().replace(/"/g, '\\"')+'">'+parts[0].trim()+'</option>'
                     });
                     html += '</select></p>';
-                } else if (listType === 'checkbox' || listType === 'radio') {
+                } else if (listType === 'checkbox') {
+                    inputTag = '.list-prompt';
+
+                    html += '<form class="list-prompt">';
+                    list.split('|').forEach((listItem) => {
+                        const parts = listItem.split(',');
+                        html += '<p><label><input type="'+listType+'" class="prompt-item" name="'+parts[0].trim().replace(/"/g, '\\"')+'" value="'+parts[1].trim().replace(/"/g, '\\"')+'" /> '+parts[0].trim()+'</label></p>'
+                    });
+                    html += '</form>';
+                } else if (listType === 'radio') {
                     inputTag = '.list-prompt';
 
                     html += '<form class="list-prompt">';
@@ -478,9 +494,6 @@ class FVTTEnhancementSuite extends Application {
                 if (parsed[query]) {
                     // Use previous input for repeated queries and selected options
                     this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
-                } else if(optionReference) {
-                    // This is a refrence to a selection option, but the option was not selected. Replace with an empty string.
-                    this.parsePromptTags(message.replace(tag, ''), resolve, parsed);
                 } else {
                     new Dialog({
                         title: "Macro Configuration",
@@ -496,7 +509,7 @@ class FVTTEnhancementSuite extends Application {
                                         this.parsePromptTags(message.replace(tag, input), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
-                                        $(inputTag).serializeArray().forEach(item => { 
+                                        $(inputTag).serializeArray().forEach(item => {
                                             selected.push(item.value) 
                                             parsed[item.name] = item.value;
                                         });
