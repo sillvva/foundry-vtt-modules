@@ -69,10 +69,13 @@ class InlineDiceParser {
      * @private
      */
     _parse(xml, nodeName, toolTip) {
+        const idRgx = /^(@(?<id>[^:]+):)/i;
         if(xml.childNodes.length === 1 ? (xml.childNodes[0].nodeName === '#text') : false) {
-            return this._interpretNode(xml.innerHTML, nodeName);
+            const m = xml.innerHTML.match(idRgx);
+            return this._interpretNode(xml.innerHTML.replace(idRgx,''), nodeName, m.groups.id);
         } else if(xml.childNodes.length === 0) {
-            return this._interpretNode(xml.nodeValue || '', nodeName);
+            const m = xml.innerHTML.match(idRgx);
+            return this._interpretNode(xml.nodeValue.replace(idRgx,'') || '', nodeName, m.groups.id);
         } else {
             let out = '';
             let outVal = '';
@@ -107,22 +110,36 @@ class InlineDiceParser {
      * @returns {String} - parsed node value
      * @private
      */
-    _interpretNode(value, name) {
+    _interpretNode(value, name, id = Object.keys(this).length) {
         if(value.length === 0) return value;
         if(name.toLowerCase() === 'math') {
+            this[id+'_ref'] = {
+                result: math.eval(value)
+            };
             return math.eval(value);
         }
         if(name.toLowerCase() === 'roll') {
             if(Roll) { // For Foundry Virtual Tabletop
-                let r = new Roll(value, {}).roll();
-                return math.eval(r.parts.reduce((whole, part) => {
+                const r = new Roll(value, {}).roll();
+                const indDie = [];
+                const result = math.eval(r.parts.reduce((whole, part) => {
                     if(part instanceof Die) {
+                        indDie.push({sides: part.sides, total: part.total});
                         return whole + part.total;
                     } else {
                         return whole + part;
                     }
                 }, ''));
+                this[id+'_ref'] = {
+                    result: result,
+                    roll: r,
+                    rolls: indDie
+                };
+                return result;
             } else { // For general non-Application use
+                this[id+'_ref'] = {
+                    result: math.eval(value)
+                };
                 return this._parseDice(value);
             }
         }
