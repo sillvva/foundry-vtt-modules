@@ -406,7 +406,7 @@ class FVTTEnhancementSuite extends Application {
     
     parseRollReferences(message, parser) {
         const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
-        const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(?<options>(\|[^\|}]+)+)?}/i);
+        const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(\|(?<options>([^\|}]+(\|)?)+))?}/i);
         if(!m) {
             return message;
         } else {
@@ -423,7 +423,7 @@ class FVTTEnhancementSuite extends Application {
                     } else if(print.trim() === 'crit') {
                         if(options.length === 2) {
                             if(!isNaN(parseInt(options[0])) && !isNaN(parseInt(options[1]))) {
-                                const crit = roll.rolls.find(r => r.sides === parseInt(options[0] && r.total >= parseInt(options[1])));
+                                const crit = roll.rolls.find(r => r.sides === parseInt(options[0]) && r.total >= parseInt(options[1]));
                                 if(crit) {
                                     message = message.replace(m[0], print);
                                 } else {
@@ -485,7 +485,7 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} parsed - previously parsed queries
      */
     parsePromptTags(message, resolve, parsed = {}) {
-        const p = message.match(/\?{(?<optionReference>:)?(\[(?<listType>(list|checkbox|radio))(\|(?<optionDelimiter>([^\]]+)?))?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
+        const p = message.match(/\?{(?<optionReference>:)?(\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\|([^\]]+)?)?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
             resolve(message);
         } else {
@@ -495,7 +495,7 @@ class FVTTEnhancementSuite extends Application {
             const list = p.groups.list;
             const defaultValue = p.groups.defaultValue;
             const optionReference = p.groups.optionReference;
-            const optionDelimiter = p.groups.optionDelimiter || ', ';
+            const optionDelimiter = (p.groups.optionDelimiter || '|, ').substr(1);
             
             if (optionReference) {
                 if (parsed[query]) {
@@ -550,6 +550,7 @@ class FVTTEnhancementSuite extends Application {
                                             selected.push(item.value) 
                                             parsed[item.name] = item.value;
                                         });
+                                        console.log(optionDelimiter);
                                         const input = selected.join(optionDelimiter);
                                         parsed[query] = input;
                                         this.parsePromptTags(message.replace(tag, input), resolve, parsed);

@@ -72,10 +72,10 @@ class InlineDiceParser {
         const idRgx = /^(@(?<id>[^:]+):)/i;
         if(xml.childNodes.length === 1 ? (xml.childNodes[0].nodeName === '#text') : false) {
             const m = xml.innerHTML.match(idRgx);
-            return this._interpretNode(xml.innerHTML.replace(idRgx,''), nodeName, m.groups.id);
+            return this._interpretNode(xml.innerHTML.replace(idRgx,''), nodeName, m ? m.groups.id : Object.keys(this).length);
         } else if(xml.childNodes.length === 0) {
-            const m = xml.innerHTML.match(idRgx);
-            return this._interpretNode(xml.nodeValue.replace(idRgx,'') || '', nodeName, m.groups.id);
+            const m = xml.nodeValue.match(idRgx);
+            return this._interpretNode(xml.nodeValue.replace(idRgx,'') || '', nodeName, m ? m.groups.id : Object.keys(this).length);
         } else {
             let out = '';
             let outVal = '';
@@ -124,7 +124,7 @@ class InlineDiceParser {
                 const indDie = [];
                 const result = math.eval(r.parts.reduce((whole, part) => {
                     if(part instanceof Die) {
-                        indDie.push({sides: part.sides, total: part.total});
+                        indDie.push({sides: part.nsides, total: part.total});
                         return whole + part.total;
                     } else {
                         return whole + part;
