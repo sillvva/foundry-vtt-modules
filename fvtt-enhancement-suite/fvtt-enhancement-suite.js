@@ -517,7 +517,7 @@ class FVTTEnhancementSuite extends Application {
             });
         }
 
-        const crit = $(chatCard).find('.crit criticaldamage').text().match(rgx);
+        const crit = $(chatCard).find('.crit[open] criticaldamage').text().match(rgx);
         if (crit) {
             crit.forEach((dmg) => {
                 const parts = dmg.split(' ');
