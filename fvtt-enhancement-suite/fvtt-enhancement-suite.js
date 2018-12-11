@@ -157,7 +157,7 @@ class FVTTEnhancementSuite extends Application {
                 custom: this.macros.filter(macro => macro.type === 'custom')
             }
         };
-        renderTemplate(this.templatePath+'/macros/macro-5e-configuration.html', data).then(html => {
+        renderTemplate(this._templatePath+'/macros/macro-5e-configuration.html', data).then(html => {
             const dialog = new Dialog({
                 title: "Macro Configuration",
                 content: html,
@@ -275,7 +275,7 @@ class FVTTEnhancementSuite extends Application {
             setTimeout(() => {
                 dialog.element.find('.new-custom-macro').off('click').on('click', (ev) => {
                     ev.preventDefault();
-                    dialog.element.find('.tab[data-tab="custom"] .macros').append(this.macroItemTemplate);
+                    dialog.element.find('.tab[data-tab="custom"] .macros').append(this._macroItemTemplate);
                     this.addCustomMacroEventListeners(dialog);
                 });
 
@@ -323,7 +323,7 @@ class FVTTEnhancementSuite extends Application {
             const data = {
                 macros: this.macros
             };
-            renderTemplate(this.templatePath+'/macros/macro-bar.html', data).then(html => {
+            renderTemplate(this._templatePath+'/macros/macro-bar.html', data).then(html => {
                 $('body').append(html);
 
                 $('.macro-bar [data-macro-id]').click((ev) => {
@@ -357,7 +357,7 @@ class FVTTEnhancementSuite extends Application {
                         if (macro.subtype === 'prompt') {
                             const dialog = new Dialog({
                                 title: "Saving Throw",
-                                content: this.saves5ePromptHtml
+                                content: this._saves5ePromptHtml
                             }).render(true);
 
                             setTimeout(() => {
@@ -378,7 +378,7 @@ class FVTTEnhancementSuite extends Application {
                         if (macro.subtype === 'prompt') {
                             const dialog = new Dialog({
                                 title: "Ability Checks",
-                                content: this.abilities5ePromptHtml
+                                content: this._abilities5ePromptHtml
                             }, { width: 600 }).render(true);
 
                             setTimeout(() => {
@@ -931,7 +931,7 @@ class FVTTEnhancementSuite extends Application {
     /**
      * Getter for the module templates path
      */
-    get templatePath() {
+    get _templatePath() {
         return 'public/modules/fvtt-enhancement-suite/templates';
     }
 
@@ -939,7 +939,7 @@ class FVTTEnhancementSuite extends Application {
      * Custom macro item template
      * @returns {string}
      */
-    get macroItemTemplate() {
+    get _macroItemTemplate() {
         return `<div class="macro">
             <div class="macro-list">
                 <div class="macro-list-name">
@@ -963,7 +963,7 @@ class FVTTEnhancementSuite extends Application {
      * Custom saving throw prompt
      * @returns {string}
      */
-    get saves5ePromptHtml() {
+    get _saves5ePromptHtml() {
         return `<div class="saves-prompt">
             <button class="str">Strength</button>
             <button class="dex">Dexterity</button>
@@ -978,7 +978,7 @@ class FVTTEnhancementSuite extends Application {
      * Custom ability check prompt
      * @returns {string}
      */
-    get abilities5ePromptHtml() {
+    get _abilities5ePromptHtml() {
         return `<div class="abilities-prompt">
             <button class="str">Strength</button>
             <button class="dex">Dexterity</button>
