@@ -329,9 +329,10 @@ class FVTTEnhancementSuite extends Application {
                     if(macro.type === 'custom') {
                         if(!macro.content) return;
                         let message = duplicate(macro.content);
-                        this.parsePrompts(message).then((parsedMessage, parsedReferences) => {
-                            let message = parsedMessage;
-                            message = this.parsePromptOptionReferences(message, parsedReferences);
+                        this.parsePrompts(message).then((parsed) => {
+                            let message = parsed.message;
+                            const references = parsed.references;
+                            message = this.parsePromptOptionReferences(message, references);
                             message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
                             const parser = new InlineDiceParser(message);
                             message = parser.parse();
@@ -409,16 +410,19 @@ class FVTTEnhancementSuite extends Application {
         const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
         const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(\|(?<options>([^\|}]+(\|)?)+))?}/i);
         if(!m) {
+            console.log(message);
             return message;
         } else {
             const id = m.groups.id;
             const print = m.groups.print || 'result';
             const options = (m.groups.options || '').split('|');
-            
+
+            // console.log(id, print, options);
+
             if(id.length > 0) {
                 const rollKey = rolls.find(key => id+'_ref');
                 if(rollKey) {
-                    const roll = parser[rollKey];
+                    const roll = duplicate(parser[id+'_ref']);
                     if(print.trim() === 'result') {
                         message = message.replace(m[0], roll.result);
                     } else if(print.trim() === 'crit') {
@@ -499,7 +503,7 @@ class FVTTEnhancementSuite extends Application {
     parsePromptTags(message, resolve, parsed = {}) {
         const p = message.match(/\?{(?!:)(\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\|([^\]]+)?)?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
-            resolve(message, parsed);
+            resolve({message: message, references: parsed});
         } else {
             const tag = p[0];
             const listType = p.groups.listType || 'list';
