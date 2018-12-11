@@ -1,7 +1,7 @@
 /**
  * Foundry VTT Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.1.0
+ * @version 0.1.2
  */
 
 class FVTTEnhancementSuite extends Application {
@@ -410,7 +410,6 @@ class FVTTEnhancementSuite extends Application {
         const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
         const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(\|(?<options>([^\|}]+(\|)?)+))?}/i);
         if(!m) {
-            console.log(message);
             return message;
         } else {
             const id = m.groups.id;
@@ -680,6 +679,18 @@ class FVTTEnhancementSuite extends Application {
         }
     }
 
+    rollTotalDamage(chatCard) {
+        let total = 0;
+        $(chatCard).find('normaldamage damage').each((i, el) => {
+            const val = (isNaN(parseInt($(el).get(0).innerText)) ? 0 : parseInt($(el).get(0).innerText));
+            total += val;
+        });
+        $(chatCard).find('.crit criticaldamage damage').each((i, el) => {
+            const val = (isNaN(parseInt($(el).get(0).innerText)) ? 0 : parseInt($(el).get(0).innerText));
+            total += val;
+        });
+        this.createMessage('/roll '+total);
+    }
 }
 
 CONFIG.FVTTEnhancementSuite = {
