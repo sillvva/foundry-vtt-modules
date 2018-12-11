@@ -424,7 +424,6 @@ class FVTTEnhancementSuite extends Application {
             "Double Damage": {
                 icon: '<i class="fas fa-user-injured"></i>',
                 callback: event => this.applyDamage(event, 2)
-
             },
             "Half Damage": {
                 icon: '<i class="fas fa-user-shield"></i>',
@@ -448,7 +447,7 @@ class FVTTEnhancementSuite extends Application {
         let total = 0;
         const normaldamage = $(chatCard).find('normaldamage').text().match(/(\d+)/g) || [];
         total += normaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
-        const criticaldamage = $(chatCard).find('.crit criticaldamage').text().match(/(\d+)/g) || [];
+        const criticaldamage = $(chatCard).find('.crit[open] criticaldamage').text().match(/(\d+)/g) || [];
         total += criticaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
         return total;
     }
@@ -518,7 +517,7 @@ class FVTTEnhancementSuite extends Application {
             });
         }
 
-        const crit = $(chatCard).find('.crit criticaldamage').text().match(rgx);
+        const crit = $(chatCard).find('.crit[open] criticaldamage').text().match(rgx);
         if (crit) {
             crit.forEach((dmg) => {
                 const parts = dmg.split(' ');
