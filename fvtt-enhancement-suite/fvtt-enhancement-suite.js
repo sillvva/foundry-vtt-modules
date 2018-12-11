@@ -1,7 +1,7 @@
 /**
  * Foundry VTT Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.1.2
+ * @version 0.1.3
  */
 
 class FVTTEnhancementSuite extends Application {
@@ -681,14 +681,10 @@ class FVTTEnhancementSuite extends Application {
 
     rollTotalDamage(chatCard) {
         let total = 0;
-        $(chatCard).find('normaldamage damage').each((i, el) => {
-            const val = (isNaN(parseInt($(el).get(0).innerText)) ? 0 : parseInt($(el).get(0).innerText));
-            total += val;
-        });
-        $(chatCard).find('.crit criticaldamage damage').each((i, el) => {
-            const val = (isNaN(parseInt($(el).get(0).innerText)) ? 0 : parseInt($(el).get(0).innerText));
-            total += val;
-        });
+        const normaldamage = $(chatCard).find('normaldamage').text().match(/(\d+)/g) || [];
+        total += normaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
+        const criticaldamage = $(chatCard).find('.crit criticaldamage').text().match(/(\d+)/g) || [];
+        total += criticaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
         this.createMessage('/roll '+total);
     }
 }
