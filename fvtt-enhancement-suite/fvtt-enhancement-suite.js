@@ -1,7 +1,7 @@
 /**
  * Foundry VTT Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.1.3
+ * @version 0.1.4
  */
 
 class FVTTEnhancementSuite extends Application {
@@ -96,8 +96,8 @@ class FVTTEnhancementSuite extends Application {
                         item.enabled = this.macros.find(macro => macro.type === 'weapon' && parseInt(macro.iid) === item.id) != null;
 
                         let toHit = !isNaN(item.data.bonus.value) ? parseInt(item.data.bonus.value || 0) : 0;
-                            toHit += item.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
-                            toHit += Math.floor((parseInt(actor.data.data.abilities[item.data.ability.value].value) - 10) / 2);
+                        toHit += item.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
+                        toHit += Math.floor((parseInt(actor.data.data.abilities[item.data.ability.value].value) - 10) / 2);
                         item.data.hit = toHit;
 
                         item.data.damage.value = item.data.damage.value.replace('+0','');
@@ -429,6 +429,10 @@ class FVTTEnhancementSuite extends Application {
             "Half Damage": {
                 icon: '<i class="fas fa-user-shield"></i>',
                 callback: event => this.applyDamage(event, 0.5)
+            },
+            "Apply Damage by Type": {
+                icon: '<i class="fas fa-user"></i>',
+                callback: event => this.applyDamageByType(event)
             }
         });
     }
@@ -437,6 +441,100 @@ class FVTTEnhancementSuite extends Application {
         let roll = $(event.currentTarget).parents('.damage-card'),
             value = Math.floor(this.getTotalDamage(roll) * multiplier);
 
+        this.applyDamageAmount(value);
+    }
+
+    getTotalDamage(chatCard) {
+        let total = 0;
+        const normaldamage = $(chatCard).find('normaldamage').text().match(/(\d+)/g) || [];
+        total += normaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
+        const criticaldamage = $(chatCard).find('.crit criticaldamage').text().match(/(\d+)/g) || [];
+        total += criticaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
+        return total;
+    }
+
+    applyDamageByType(event) {
+        const roll = $(event.currentTarget).parents('.damage-card');
+        let types = this.getTotalDamageByType(roll);
+        this.promptDamageTypes(types.reverse());
+    }
+
+    promptDamageTypes(types) {
+        let dmg = types.pop();
+        const d = new Dialog({
+            title: 'Select Damage Method',
+            content: '<h1 style="text-align: center;">'+dmg.amount+' '+dmg.type+'</h1>',
+            buttons: {
+                normal: {
+                    icon: '',
+                    label: 'Normal',
+                    callback: () => {
+                        this.applyDamageAmount(dmg.amount);
+                        if (types.length > 0) this.promptDamageTypes(types);
+                    }
+                },
+                immune: {
+                    icon: '',
+                    label: 'Immune',
+                    callback: () => {
+                        this.applyDamageAmount(0);
+                        if (types.length > 0) this.promptDamageTypes(types);
+                    }
+                },
+                resistant: {
+                    icon: '',
+                    label: 'Resistant',
+                    callback: () => {
+                        this.applyDamageAmount(Math.floor(dmg.amount * 0.5));
+                        if (types.length > 0) this.promptDamageTypes(types);
+                    }
+                },
+                vulnerable: {
+                    icon: '',
+                    label: 'Vulnerable',
+                    callback: () => {
+                        this.applyDamageAmount(dmg.amount * 2);
+                        if (types.length > 0) this.promptDamageTypes(types);
+                    }
+                }
+            }
+        }).render(true);
+    }
+
+    getTotalDamageByType(chatCard) {
+        const rgx = /(\d+) ?(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)?/gi;
+        let types = [];
+
+        const norm = $(chatCard).find('normaldamage').text().match(rgx);
+        if (norm) {
+            norm.forEach((dmg) => {
+                const parts = dmg.split(' ');
+                const t = types.find(type => type.type === (parts[1] || 'typeless'));
+                if (t) {
+                    t.amount += parseInt(parts[0]);
+                } else {
+                    types.push({ amount: parseInt(parts[0]), type: parts[1] || 'typeless' });
+                }
+            });
+        }
+
+        const crit = $(chatCard).find('.crit criticaldamage').text().match(rgx);
+        if (crit) {
+            crit.forEach((dmg) => {
+                const parts = dmg.split(' ');
+                const t = types.find(type => type.type === (parts[1] || 'typeless'));
+                if (t) {
+                    t.amount += parseInt(parts[0]);
+                } else {
+                    types.push({ amount: parseInt(parts[0]), type: parts[1] || 'typeless' });
+                }
+            });
+        }
+
+        return types;
+    }
+
+    applyDamageAmount(value) {
         // Get tokens to which damage can be applied
         const tokens = canvas.tokens.controlledTokens.filter(t => {
             if ( t.actor && t.data.actorLink ) return true;
@@ -508,7 +606,7 @@ class FVTTEnhancementSuite extends Application {
                     }
                 }
             }
-            
+
             return this.parseRollReferences(message, parser);
         }
     }
@@ -532,7 +630,7 @@ class FVTTEnhancementSuite extends Application {
      * @example <caption>Checkbox examples</caption>
      * // Selected options will be printed out separated by the delimiter of choice (default ", ")
      * ?{[checkbox|delimiter]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     * 
+     *
      * // Selected options can be referenced additional times with the following.
      * // If option was not selected, this tag will be replaced with an empty string.
      * ?{:option 1 label}
@@ -563,7 +661,7 @@ class FVTTEnhancementSuite extends Application {
             const list = p.groups.list;
             const defaultValue = p.groups.defaultValue;
             const optionDelimiter = (p.groups.optionDelimiter || '|, ').substr(1);
-            
+
             if (list) {
                 let html = '<p>'+query+'</p>';
                 let inputTag = '';
@@ -607,8 +705,8 @@ class FVTTEnhancementSuite extends Application {
                                         this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
-                                        $(inputTag).serializeArray().forEach(item => { 
-                                            selected.push(item.value.split(',')[0]) 
+                                        $(inputTag).serializeArray().forEach(item => {
+                                            selected.push(item.value.split(',')[0])
                                             parsed[item.name] = item.value.split(',');
                                         });
                                         const input = selected.join(optionDelimiter);
@@ -627,7 +725,7 @@ class FVTTEnhancementSuite extends Application {
             }
         }
     }
-    
+
     parsePromptOptionReferences(message, parsed) {
         const p = message.match(/\?{:(?<query>[^\|}]+)\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
@@ -636,7 +734,7 @@ class FVTTEnhancementSuite extends Application {
             const tag = p[0];
             const query = p.groups.query.trim();
             const defaultValue = p.groups.defaultValue || '1';
-            
+
             if (parsed[query]) {
                 // Use previous input for repeated queries and selected options
                 let defaultParsed = 0;
@@ -730,15 +828,6 @@ class FVTTEnhancementSuite extends Application {
         else {
             return { name: key, value: data };
         }
-    }
-
-    getTotalDamage(chatCard) {
-        let total = 0;
-        const normaldamage = $(chatCard).find('normaldamage').text().match(/(\d+)/g) || [];
-        total += normaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
-        const criticaldamage = $(chatCard).find('.crit criticaldamage').text().match(/(\d+)/g) || [];
-        total += criticaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
-        return total;
     }
 }
 
