@@ -4,7 +4,7 @@
         <a class="item flex-1 active" data-tab="weapons-spells">Weapons&nbsp;&amp;&nbsp;Spells</a>
         {{/if}}
         <a class="item flex-1" data-tab="saving-throws">Saving&nbsp;Throws</a>
-        <!--<a class="item flex-1" data-tab="ability-checks">Ability&nbsp;Checks</a>-->
+        <a class="item flex-1" data-tab="ability-checks">Ability&nbsp;Checks</a>
         {{#if hasMacros.tools}}
         <a class="item flex-1" data-tab="tools">Tools</a>
         {{/if}}
@@ -63,37 +63,37 @@
                 </div>
                 <div class="enable-one">
                     <label>
-                        <input type="checkbox" class="str" name="STR Save" {{checked macros.saves.str}}>
+                        <input type="checkbox" class="str" name="Strength Save" {{checked macros.saves.str}}>
                         Strength
                     </label>
                 </div>
                 <div class="enable-one">
                     <label>
-                        <input type="checkbox" class="dex" name="DEX Save" {{checked macros.saves.dex}}>
+                        <input type="checkbox" class="dex" name="Dexterity Save" {{checked macros.saves.dex}}>
                         Dexterity
                     </label>
                 </div>
                 <div class="enable-one">
                     <label>
-                        <input type="checkbox" class="con" name="CON Save" {{checked macros.saves.con}}>
+                        <input type="checkbox" class="con" name="Constitution Save" {{checked macros.saves.con}}>
                         Constitution
                     </label>
                 </div>
                 <div class="enable-one">
                     <label>
-                        <input type="checkbox" class="int" name="INT Save" {{checked macros.saves.int}}>
+                        <input type="checkbox" class="int" name="Intelligence Save" {{checked macros.saves.int}}>
                         Intelligence
                     </label>
                 </div>
                 <div class="enable-one">
                     <label>
-                        <input type="checkbox" class="wis" name="WIS Save" {{checked macros.saves.wis}}>
+                        <input type="checkbox" class="wis" name="Wisdom Save" {{checked macros.saves.wis}}>
                         Wisdom
                     </label>
                 </div>
                 <div class="enable-one">
                     <label>
-                        <input type="checkbox" class="cha" name="CHA Save" {{checked macros.saves.cha}}>
+                        <input type="checkbox" class="cha" name="Charisma Save" {{checked macros.saves.cha}}>
                         Charisma
                     </label>
                 </div>
@@ -102,7 +102,163 @@
     </div>
 
     <div class="tab" data-tab="ability-checks">
-
+        <div class="macros">
+            <div class="ability-toggles">
+                <div class="enable-all">
+                    <label>
+                        <input type="checkbox" class="prompt" name="Ability Checks" {{checked macros.abilitis.prompt}}>
+                        Prompt (Creates one macro that prompts which abililty to use)
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="str" name="Strength Check" {{checked macros.abilitis.str}}>
+                        Strength
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="dex" name="Dexterity Check" {{checked macros.abilitis.dex}}>
+                        Dexterity
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="con" name="Constitution Check" {{checked macros.abilitis.con}}>
+                        Constitution
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="int" name="Intelligence Check" {{checked macros.abilitis.int}}>
+                        Intelligence
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="wis" name="Wisdom check" {{checked macros.abilitis.wis}}>
+                        Wisdom
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="cha" name="Charisma" {{checked macros.abilitis.cha}}>
+                        Charisma
+                    </label>
+                </div>
+            </div>
+            <hr />
+            <div class="ability-toggles">
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="acr" name="Acrobatics Check" {{checked macros.abilitis.acr}}>
+                        Acrobatics
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="ani" name="Animal Handling Check" {{checked macros.abilitis.ani}}>
+                        Animal Handling
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="arc" name="Arcana Check" {{checked macros.abilitis.arc}}>
+                        Arcana
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="ath" name="Athletics Check" {{checked macros.abilitis.ath}}>
+                        Athletics
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="dec" name="Deception check" {{checked macros.abilitis.dec}}>
+                        Deception
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="his" name="History" {{checked macros.abilitis.his}}>
+                        History
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="ins" name="Insight Check" {{checked macros.abilitis.ins}}>
+                        Insight
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="itm" name="Intimidation Check" {{checked macros.abilitis.itm}}>
+                        Intimidation
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="inv" name="Investigation Check" {{checked macros.abilitis.inv}}>
+                        Investigation
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="med" name="Medicine Check" {{checked macros.abilitis.med}}>
+                        Medicine
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="nat" name="Nature check" {{checked macros.abilitis.nat}}>
+                        Nature
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="prc" name="Perception" {{checked macros.abilitis.prc}}>
+                        Perception
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="prf" name="Performance Check" {{checked macros.abilitis.prf}}>
+                        Performance
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="per" name="Persuasion Check" {{checked macros.abilitis.per}}>
+                        Persuasion
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="rel" name="Religion Check" {{checked macros.abilitis.rel}}>
+                        Religion
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="slt" name="Sleight of Hand Check" {{checked macros.abilitis.slt}}>
+                        Sleight of Hand
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="ste" name="Stealth check" {{checked macros.abilitis.ste}}>
+                        Stealth
+                    </label>
+                </div>
+                <div class="enable-one">
+                    <label>
+                        <input type="checkbox" class="sur" name="Survival" {{checked macros.abilitis.sur}}>
+                        Survival
+                    </label>
+                </div>
+            </div>
+        </div>
     </div>
 
     <div class="tab" data-tab="tools">

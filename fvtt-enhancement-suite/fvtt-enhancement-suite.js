@@ -31,7 +31,7 @@ class FVTTEnhancementSuite extends Application {
                 }
             });
 
-            if(game.data.system.name === 'dnd5e') {
+            if (game.data.system.name === 'dnd5e') {
                 this.macros = JSON.parse(game.settings.get("dnd5e", "macros"));
                 this.renderMacro5eBar();
             }
@@ -64,15 +64,11 @@ class FVTTEnhancementSuite extends Application {
         });
     }
 
+    /**
+     * Hook into the render call for the ChatLog
+     */
     hookChat() {
         Hooks.on('renderChatLog', (log, html, data) => this.chatListeners(html));
-    }
-
-    /**
-     * Getter for the module templates path
-     */
-    get templatePath() {
-        return 'public/modules/fvtt-enhancement-suite/templates';
     }
 
     /**
@@ -80,7 +76,7 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} actor - actor entity
      */
     macro5eDialog(actor) {
-        if(!this.macros) return;
+        if (!this.macros) return;
         const items = duplicate(actor.data.items);
         const data = {
             actor: actor,
@@ -125,6 +121,33 @@ class FVTTEnhancementSuite extends Application {
                     int: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'int') || false,
                     wis: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') || false,
                     cha: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') || false
+                },
+                abilities: {
+                    prompt: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false,
+                    str: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'str') || false,
+                    dex: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dex') || false,
+                    con: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'con') || false,
+                    int: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'int') || false,
+                    wis: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'wis') || false,
+                    cha: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'cha') || false,
+                    acr: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'acr') || false,
+                    ani: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ani') || false,
+                    arc: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'arc') || false,
+                    ath: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ath') || false,
+                    dec: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dec') || false,
+                    his: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'his') || false,
+                    ins: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ins') || false,
+                    itm: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'itm') || false,
+                    inv: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'inv') || false,
+                    med: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'med') || false,
+                    nat: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'nat') || false,
+                    prc: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prc') || false,
+                    prf: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prf') || false,
+                    per: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'per') || false,
+                    rel: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'rel') || false,
+                    slt: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'slt') || false,
+                    ste: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ste') || false,
+                    sur: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'sur') || false
                 },
                 tools: items.filter(item => item.type === 'tool')
                     .map(item => {
@@ -175,10 +198,25 @@ class FVTTEnhancementSuite extends Application {
                                 });
                             }
 
+                            // Ability Check Macros
+                            const abilityEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="ability-checks"] input[type="checkbox"]');
+                            for(let i = 0; i < abilityEntries.length; i++) {
+                                if (!$(abilityEntries[i]).get(0).checked) continue;
+                                let label = $(abilityEntries[i]).attr('name');
+                                let subtype = $(abilityEntries[i]).attr('class');
+                                macros.push({
+                                    mid: macros.length,
+                                    type: 'ability-check',
+                                    subtype: subtype,
+                                    actor: actor._id,
+                                    label: label
+                                });
+                            }
+
                             // Saving Throw Macros
                             const saveEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="saving-throws"] input[type="checkbox"]');
                             for(let i = 0; i < saveEntries.length; i++) {
-                                if(!$(saveEntries[i]).get(0).checked) continue;
+                                if (!$(saveEntries[i]).get(0).checked) continue;
                                 let label = $(saveEntries[i]).attr('name');
                                 let subtype = $(saveEntries[i]).attr('class');
                                 macros.push({
@@ -277,50 +315,11 @@ class FVTTEnhancementSuite extends Application {
     }
 
     /**
-     * Custom macro item template
-     * @returns {string}
-     */
-    get macroItemTemplate() {
-        return `<div class="macro">
-            <div class="macro-list">
-                <div class="macro-list-name">
-                    New Macro
-                </div>
-                <a class="macro-list-btn fas fa-edit"></a>
-                <a class="macro-list-btn fas fa-times"></a>
-            </div>
-            <div class="macro-edit">
-                <div class="macro-label">
-                    <input type="text" name="label" placeholder="Macro Name" />
-                </div>
-                <div class="macro-content">
-                    <textarea name="content" name="content"></textarea>
-                </div>
-            </div>
-        </div>`;
-    }
-
-    /**
-     * Custom saving throw prompt
-     * @returns {string}
-     */
-    get saves5ePromptHtml() {
-        return `<div class="saves-prompt">
-            <button class="str">Strength</button>
-            <button class="dex">Dexterity</button>
-            <button class="con">Constitution</button>
-            <button class="int">Intelligence</button>
-            <button class="wis">Wisdom</button>
-            <button class="cha">Charisma</button>
-        </div>`;
-    }
-
-    /**
      * Render the 5e macro bar
      */
     renderMacro5eBar() {
         $('body .macro-bar').remove();
-        if(this.macros.length > 0) {
+        if (this.macros.length > 0) {
             const data = {
                 macros: this.macros
             };
@@ -331,22 +330,13 @@ class FVTTEnhancementSuite extends Application {
                     const macroId = parseInt($(ev.target).attr('data-macro-id'));
                     const macro = this.macros.find(m => m.mid === macroId);
 
-                    if(macro.type === 'custom') {
-                        if(!macro.content) return;
+                    if (macro.type === 'custom') {
+                        if (!macro.content) return;
                         let message = duplicate(macro.content);
-                        this.parsePrompts(message).then((parsed) => {
-                            let message = parsed.message;
-                            const references = parsed.references;
-                            message = this.parsePromptOptionReferences(message, references);
-                            message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
-                            const parser = new InlineDiceParser(message);
-                            message = parser.parse();
-                            message = this.parseRollReferences(message, parser);
-                            this.createMessage(message);
-                        });
+                        this.parseCustomMacro(message);
                     }
 
-                    if(macro.type === 'weapon' || macro.type === 'spell') {
+                    if (macro.type === 'weapon' || macro.type === 'spell') {
                         let actor = game.actors.entities.find(a => a._id === macro.actor).data;
                         let itemId = Number(macro.iid),
                             Item = CONFIG.Item.entityClass,
@@ -354,7 +344,7 @@ class FVTTEnhancementSuite extends Application {
                         item.roll();
                     }
 
-                    if(macro.type === 'tool') {
+                    if (macro.type === 'tool') {
                         let actor = game.actors.entities.find(a => a._id === macro.actor);
                         let itemId = Number(macro.iid),
                             Item = CONFIG.Item.entityClass,
@@ -362,9 +352,9 @@ class FVTTEnhancementSuite extends Application {
                         item.roll();
                     }
 
-                    if(macro.type === 'saving-throw') {
+                    if (macro.type === 'saving-throw') {
                         let actor = game.actors.entities.find(a => a._id === macro.actor);
-                        if(macro.subtype === 'prompt') {
+                        if (macro.subtype === 'prompt') {
                             const dialog = new Dialog({
                                 title: "Saving Throw",
                                 content: this.saves5ePromptHtml
@@ -382,11 +372,51 @@ class FVTTEnhancementSuite extends Application {
                             actor.rollAbilitySave(macro.subtype);
                         }
                     }
+
+                    if (macro.type === 'ability-check') {
+                        let actor = game.actors.entities.find(a => a._id === macro.actor);
+                        if (macro.subtype === 'prompt') {
+                            const dialog = new Dialog({
+                                title: "Ability Checks",
+                                content: this.abilities5ePromptHtml
+                            }, { width: 600 }).render(true);
+
+                            setTimeout(() => {
+                                ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
+                                    dialog.element.find('.'+abl).off('click').on('click', () => {
+                                        dialog.close();
+                                        actor.rollAbilityTest(abl);
+                                    });
+                                });
+                                ['acr', 'ani', 'arc', 'ath', 'dec', 'his',
+                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
+                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].forEach((skl) => {
+                                    dialog.element.find('.'+skl).off('click').on('click', () => {
+                                        dialog.close();
+                                        actor.rollSkill(skl);
+                                    });
+                                });
+                            }, 10);
+                        } else {
+                            if (['str', 'dex', 'con', 'int', 'wis', 'cha'].indexOf(macro.subtype) >= 0) {
+                                actor.rollAbilitySave(macro.subtype);
+                            }
+                            if (['acr', 'ani', 'arc', 'ath', 'dec', 'his',
+                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
+                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].indexOf(macro.subtype) >= 0) {
+                                actor.rollSkill(macro.subtype);
+                            }
+                        }
+                    }
                 })
             });
         }
     }
 
+    /**
+     * Create chat entry in ChatLog
+     * @param message
+     */
     createMessage(message) {
         const data = {
             user: game.user._id
@@ -411,6 +441,10 @@ class FVTTEnhancementSuite extends Application {
         ChatMessage.create(data, !0);
     }
 
+    /**
+     * Create context menu for chat items
+     * @param html
+     */
     chatListeners(html) {
         new ContextMenu(html, ".damage-card", {
             "Apply Damage": {
@@ -434,8 +468,39 @@ class FVTTEnhancementSuite extends Application {
                 callback: event => this.applyDamageByType(event)
             }
         });
+
+        html.find('.message-content').each((i, el) => {
+            this.parseCustomMacro($(el).html(), el);
+        });
     }
 
+    /**
+     * Parse custom macro HTML
+     * @param msg = content to be parsed
+     * @param el = element to replace content, create new entry if null
+     */
+    parseCustomMacro(msg, el) {
+        this.parsePrompts(msg).then((parsed) => {
+            let message = parsed.message;
+            const references = parsed.references;
+            message = this.parsePromptOptionReferences(message, references);
+            message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
+            const parser = new InlineDiceParser(message);
+            message = parser.parse();
+            message = this.parseRollReferences(message, parser);
+            if (el) {
+                $(el).html(message);
+            } else {
+                this.createMessage(message);
+            }
+        });
+    }
+
+    /**
+     * Apply damage/healing to selected tokens
+     * @param event
+     * @param multiplier
+     */
     applyDamage(event, multiplier) {
         let roll = $(event.currentTarget).parents('.damage-card'),
             value = Math.floor(this.getTotalDamage(roll) * multiplier);
@@ -443,6 +508,11 @@ class FVTTEnhancementSuite extends Application {
         this.applyDamageAmount(value);
     }
 
+    /**
+     * Get total damage from .damage-card
+     * @param chatCard
+     * @returns {number}
+     */
     getTotalDamage(chatCard) {
         let total = 0;
         const normaldamage = $(chatCard).find('normaldamage').text().match(/(\d+)/g) || [];
@@ -452,12 +522,20 @@ class FVTTEnhancementSuite extends Application {
         return total;
     }
 
+    /**
+     * Apply damage by type to selected tokens
+     * @param event
+     */
     applyDamageByType(event) {
         const roll = $(event.currentTarget).parents('.damage-card');
         let types = this.getTotalDamageByType(roll);
         this.promptDamageTypes(types.reverse());
     }
 
+    /**
+     * Prompt user preference for each damage type in .damage-card
+     * @param types
+     */
     promptDamageTypes(types) {
         let dmg = types.pop();
         const d = new Dialog({
@@ -500,6 +578,11 @@ class FVTTEnhancementSuite extends Application {
         }).render(true);
     }
 
+    /**
+     * Get total damage by damage type in .damage-card
+     * @param chatCard
+     * @returns {Array}
+     */
     getTotalDamageByType(chatCard) {
         const rgx = /(\d+) ?(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)?/gi;
         let types = [];
@@ -533,6 +616,10 @@ class FVTTEnhancementSuite extends Application {
         return types;
     }
 
+    /**
+     * Apply damage amount to selected tokens
+     * @param value
+     */
     applyDamageAmount(value) {
         // Get tokens to which damage can be applied
         const tokens = canvas.tokens.controlledTokens.filter(t => {
@@ -556,10 +643,16 @@ class FVTTEnhancementSuite extends Application {
         }
     }
 
+    /**
+     * Parse references to named rolls
+     * @param message
+     * @param parser
+     * @returns {String} - parsed message
+     */
     parseRollReferences(message, parser) {
         const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
         const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(\|(?<options>([^\|}]+(\|)?)+))?}/i);
-        if(!m) {
+        if (!m) {
             return message;
         } else {
             const id = m.groups.id;
@@ -568,20 +661,20 @@ class FVTTEnhancementSuite extends Application {
 
             // console.log(id, print, options);
 
-            if(id.length > 0) {
+            if (id.length > 0) {
                 const rollKey = rolls.find(key => id+'_ref');
-                if(rollKey) {
+                if (rollKey) {
                     const roll = duplicate(parser[id+'_ref']);
-                    if(print.trim() === 'result') {
+                    if (print.trim() === 'result') {
                         message = message.replace(m[0], roll.result);
-                    } else if(print.trim() === 'crit') {
-                        if(options.length === 2 && !isNaN(parseInt(options[0]))) {
+                    } else if (print.trim() === 'crit') {
+                        if (options.length === 2 && !isNaN(parseInt(options[0]))) {
                             const die = roll.rolls[parseInt(options[0]) - 1];
                             let critRange = die.sides;
-                            if(!isNaN(parseInt(options[1]))) {
+                            if (!isNaN(parseInt(options[1]))) {
                                 critRange = parseInt(options[1]);
                             }
-                            if(die ? die.total >= critRange : false) {
+                            if (die ? die.total >= critRange : false) {
                                 message = message.replace(m[0], print);
                             } else {
                                 message = message.replace(m[0], '');
@@ -589,10 +682,10 @@ class FVTTEnhancementSuite extends Application {
                         } else {
                             message = message.replace(m[0], '');
                         }
-                    } else if(print.trim() === 'fumble') {
-                        if(options.length === 1 && !isNaN(parseInt(options[0]))) {
+                    } else if (print.trim() === 'fumble') {
+                        if (options.length === 1 && !isNaN(parseInt(options[0]))) {
                             const die = roll.rolls[parseInt(options[0]) - 1];
-                            if(die ? die.total === 1 : false) {
+                            if (die ? die.total === 1 : false) {
                                 message = message.replace(m[0], print);
                             } else {
                                 message = message.replace(m[0], '');
@@ -651,7 +744,7 @@ class FVTTEnhancementSuite extends Application {
      */
     parsePromptTags(message, resolve, parsed = {}) {
         const p = message.match(/\?{(?!:)(\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\|([^\]]+)?)?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
-        if(!p) {
+        if (!p) {
             resolve({message: message, references: parsed});
         } else {
             const tag = p[0];
@@ -725,9 +818,15 @@ class FVTTEnhancementSuite extends Application {
         }
     }
 
+    /**
+     * Parse references to selected prompt options
+     * @param message
+     * @param parsed
+     * @returns {String} - parsed message
+     */
     parsePromptOptionReferences(message, parsed) {
         const p = message.match(/\?{:(?<query>[^\|}]+)\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
-        if(!p) {
+        if (!p) {
             return message;
         } else {
             const tag = p[0];
@@ -737,7 +836,7 @@ class FVTTEnhancementSuite extends Application {
             if (parsed[query]) {
                 // Use previous input for repeated queries and selected options
                 let defaultParsed = 0;
-                if(!isNaN(parseInt(defaultValue) || '1')) {
+                if (!isNaN(parseInt(defaultValue) || '1')) {
                     defaultParsed = parseInt(defaultValue) - 1;
                 }
                 return this.parsePromptOptionReferences(message.replace(tag, parsed[query][defaultParsed]), parsed);
@@ -766,10 +865,10 @@ class FVTTEnhancementSuite extends Application {
     parseActor5eData(message, actor) {
         const actorInfo = this._getActorDataPieces(actor);
         let messageTags = message.match(new RegExp("{{(?<tags>[^}]*)}}", "gi"));
-        if(!messageTags) return message;
+        if (!messageTags) return message;
         messageTags.forEach((tag) => {
             let tagName = tag.replace(/{{|}}/g,'');
-            if(!actorInfo.find(info => info.name === tagName)) return;
+            if (!actorInfo.find(info => info.name === tagName)) return;
             message = message.replace(tag, actorInfo.find(info => info.name === tagName).value);
         });
         return message;
@@ -786,14 +885,14 @@ class FVTTEnhancementSuite extends Application {
         actorInfo.push({ name: 'name', value: actor.data.name });
         actorInfo = actorInfo.map(field => {
             field.name = field.name.replace(/data\.((details|attributes|resources|spells|traits|abilities)\.)?|\.value/gi, '');
-            if(CONFIG.FVTTEnhancementSuite.actorDataReplacements[field.name]) {
+            if (CONFIG.FVTTEnhancementSuite.actorDataReplacements[field.name]) {
                 field.name = CONFIG.FVTTEnhancementSuite.actorDataReplacements[field.name];
             }
             return field;
         }).filter(field => {
             return ['biography', 'speed'].indexOf(field.name) < 0 && field.name.indexOf('skills.') < 0;
         });
-        if(game.data.system.name === 'dnd5e') {
+        if (game.data.system.name === 'dnd5e') {
             actor.data.items.filter(item => item.type === 'class').forEach((item, i) => {
                 actorInfo.push({ name: 'class'+(i+1), value: item.name });
                 actorInfo.push({ name: 'class'+(i+1)+'.subclass', value: item.data.subclass.value });
@@ -810,12 +909,12 @@ class FVTTEnhancementSuite extends Application {
      * @private
      */
     _parseActorSubdata(data, key) {
-        if(typeof data === 'object') {
+        if (typeof data === 'object') {
             let info = [];
             Object.keys(data).forEach(nextkey => {
-                if(typeof data[nextkey] !== 'object' && ['value', 'max', 'mod', 'save'].indexOf(nextkey) < 0) return;
+                if (typeof data[nextkey] !== 'object' && ['value', 'max', 'mod', 'save'].indexOf(nextkey) < 0) return;
                 let subdata = this._parseActorSubdata(data[nextkey], key+'.'+nextkey);
-                if(subdata.hasOwnProperty('name')) {
+                if (subdata.hasOwnProperty('name')) {
                     info.push(subdata);
                 }
                 else {
@@ -827,6 +926,88 @@ class FVTTEnhancementSuite extends Application {
         else {
             return { name: key, value: data };
         }
+    }
+
+    /**
+     * Getter for the module templates path
+     */
+    get templatePath() {
+        return 'public/modules/fvtt-enhancement-suite/templates';
+    }
+
+    /**
+     * Custom macro item template
+     * @returns {string}
+     */
+    get macroItemTemplate() {
+        return `<div class="macro">
+            <div class="macro-list">
+                <div class="macro-list-name">
+                    New Macro
+                </div>
+                <a class="macro-list-btn fas fa-edit"></a>
+                <a class="macro-list-btn fas fa-times"></a>
+            </div>
+            <div class="macro-edit">
+                <div class="macro-label">
+                    <input type="text" name="label" placeholder="Macro Name" />
+                </div>
+                <div class="macro-content">
+                    <textarea name="content" name="content"></textarea>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    /**
+     * Custom saving throw prompt
+     * @returns {string}
+     */
+    get saves5ePromptHtml() {
+        return `<div class="saves-prompt">
+            <button class="str">Strength</button>
+            <button class="dex">Dexterity</button>
+            <button class="con">Constitution</button>
+            <button class="int">Intelligence</button>
+            <button class="wis">Wisdom</button>
+            <button class="cha">Charisma</button>
+        </div>`;
+    }
+
+    /**
+     * Custom ability check prompt
+     * @returns {string}
+     */
+    get abilities5ePromptHtml() {
+        return `<div class="abilities-prompt">
+            <button class="str">Strength</button>
+            <button class="dex">Dexterity</button>
+            <button class="con">Constitution</button>
+            <button class="int">Intelligence</button>
+            <button class="wis">Wisdom</button>
+            <button class="cha">Charisma</button>
+        </div>
+        <hr />
+        <div class="abilities-prompt">
+            <button class="acr">Acrobatics</button>
+            <button class="ani">Animal Handling</button>
+            <button class="arc">Arcana</button>
+            <button class="ath">Athletics</button>
+            <button class="dec">Deception</button>
+            <button class="his">History</button>
+            <button class="ins">Insight</button>
+            <button class="itm">Intimidation</button>
+            <button class="inv">Investigation</button>
+            <button class="med">Medicine</button>
+            <button class="nat">Nature</button>
+            <button class="prc">Perception</button>
+            <button class="prf">Performance</button>
+            <button class="per">Persuasion</button>
+            <button class="rel">Religion</button>
+            <button class="slt">Sleight of Hand</button>
+            <button class="ste">Stealth</button>
+            <button class="sur">Survival</button>
+        </div>`;
     }
 }
 

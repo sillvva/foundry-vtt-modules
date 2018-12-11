@@ -198,6 +198,25 @@
 }
 
 /**
+ * Ability Checks Configuration
+ */
+.ability-toggles {
+    width: 600px;
+    display: flex;
+    flex-wrap: wrap;
+}
+.ability-toggles .enable-all {
+    flex: 6; min-width: 90%;
+    border-bottom: 1px solid #ccc;
+}
+.ability-toggles .enable-one {
+    flex: 1; min-width: 15%;
+}
+.ability-toggles label {
+    padding: 5px; width: 100%; display: block;
+}
+
+/**
  * Tools Configuration
  */
 .macro-sheet .tools-header, .macro-sheet .tool {
@@ -243,6 +262,19 @@
 }
 .saves-prompt button {
     width: calc(100% / 3 - 10px);
+    margin: 5px;
+}
+
+/**
+ * Saving Throw Prompt
+ */
+.abilities-prompt {
+    display: flex;
+    flex-wrap: wrap;
+    padding: 5px;
+}
+.abilities-prompt button {
+    width: calc(100% / 6 - 10px);
     margin: 5px;
 }
 
