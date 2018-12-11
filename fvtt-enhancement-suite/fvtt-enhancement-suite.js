@@ -11,6 +11,7 @@ class FVTTEnhancementSuite extends Application {
 
         this.hookReady();
         this.hookActor5eSheet();
+        this.hookChat();
     }
 
     /**
@@ -61,6 +62,10 @@ class FVTTEnhancementSuite extends Application {
 
             Hooks.call('toolbar5eReady', toolbar);
         });
+    }
+
+    hookChat() {
+        Hooks.on('renderChatLog', (log, html, data) => this.chatListeners(html));
     }
 
     /**
@@ -405,7 +410,55 @@ class FVTTEnhancementSuite extends Application {
 
         ChatMessage.create(data, !0);
     }
-    
+
+    chatListeners(html) {
+        new ContextMenu(html, ".damage-card", {
+            "Apply Damage": {
+                icon: '<i class="fas fa-user-minus"></i>',
+                callback: event => this.applyDamage(event, 1)
+            },
+            "Apply Healing": {
+                icon: '<i class="fas fa-user-plus"></i>',
+                callback: event => this.applyDamage(event, -1)
+            },
+            "Double Damage": {
+                icon: '<i class="fas fa-user-injured"></i>',
+                callback: event => this.applyDamage(event, 2)
+
+            },
+            "Half Damage": {
+                icon: '<i class="fas fa-user-shield"></i>',
+                callback: event => this.applyDamage(event, 0.5)
+            }
+        });
+    }
+
+    applyDamage(event, multiplier) {
+        let roll = $(event.currentTarget).parents('.damage-card'),
+            value = Math.floor(this.getTotalDamage(roll) * multiplier);
+
+        // Get tokens to which damage can be applied
+        const tokens = canvas.tokens.controlledTokens.filter(t => {
+            if ( t.actor && t.data.actorLink ) return true;
+            else if ( t.data.bar1.attribute === "attributes.hp" || t.data.bar2.attribute === "attributes.hp" ) return true;
+            return false;
+        });
+        if ( tokens.length === 0 ) return;
+
+        // Apply damage to all tokens
+        for ( let t of tokens ) {
+            if ( t.actor && t.data.actorLink ) {
+                let hp = parseInt(t.actor.data.data.attributes.hp.value),
+                    max = parseInt(t.actor.data.data.attributes.hp.max);
+                t.actor.update({"data.attributes.hp.value": Math.clamped(hp - value, 0, max)}, true);
+            }
+            else {
+                let bar = (t.data.bar1.attribute === "attributes.hp") ? "bar1" : "bar2";
+                t.update({[`${bar}.value`]: Math.clamped(t.data[bar].value - value, 0, t.data[bar].max)}, true);
+            }
+        }
+    }
+
     parseRollReferences(message, parser) {
         const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
         const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(\|(?<options>([^\|}]+(\|)?)+))?}/i);
@@ -679,13 +732,13 @@ class FVTTEnhancementSuite extends Application {
         }
     }
 
-    rollTotalDamage(chatCard) {
+    getTotalDamage(chatCard) {
         let total = 0;
         const normaldamage = $(chatCard).find('normaldamage').text().match(/(\d+)/g) || [];
         total += normaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
         const criticaldamage = $(chatCard).find('.crit criticaldamage').text().match(/(\d+)/g) || [];
         total += criticaldamage.reduce((total, dmg) => total + parseInt(dmg), 0);
-        this.createMessage('/roll '+total);
+        return total;
     }
 }
 
