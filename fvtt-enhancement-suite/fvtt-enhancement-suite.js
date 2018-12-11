@@ -329,10 +329,14 @@ class FVTTEnhancementSuite extends Application {
                     if(macro.type === 'custom') {
                         if(!macro.content) return;
                         let message = duplicate(macro.content);
-                        this.parsePrompts(message).then(parsedMessage => {
-                            let message = parsedMessage;
+                        this.parsePrompts(message).then((parsed) => {
+                            let message = parsed.message;
+                            const references = parsed.references;
+                            message = this.parsePromptOptionReferences(message, references);
                             message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
-                            message = new InlineDiceParser(message).parse();
+                            const parser = new InlineDiceParser(message);
+                            message = parser.parse();
+                            message = this.parseRollReferences(message, parser);
                             this.createMessage(message);
                         });
                     }
@@ -401,6 +405,61 @@ class FVTTEnhancementSuite extends Application {
 
         ChatMessage.create(data, !0);
     }
+    
+    parseRollReferences(message, parser) {
+        const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
+        const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(\|(?<options>([^\|}]+(\|)?)+))?}/i);
+        if(!m) {
+            console.log(message);
+            return message;
+        } else {
+            const id = m.groups.id;
+            const print = m.groups.print || 'result';
+            const options = (m.groups.options || '').split('|');
+
+            // console.log(id, print, options);
+
+            if(id.length > 0) {
+                const rollKey = rolls.find(key => id+'_ref');
+                if(rollKey) {
+                    const roll = duplicate(parser[id+'_ref']);
+                    if(print.trim() === 'result') {
+                        message = message.replace(m[0], roll.result);
+                    } else if(print.trim() === 'crit') {
+                        if(options.length === 2 && !isNaN(parseInt(options[0]))) {
+                            const die = roll.rolls[parseInt(options[0]) - 1];
+                            let critRange = die.sides;
+                            if(!isNaN(parseInt(options[1]))) {
+                                critRange = parseInt(options[1]);
+                            }
+                            if(die ? die.total >= critRange : false) {
+                                message = message.replace(m[0], print);
+                            } else {
+                                message = message.replace(m[0], '');
+                            }
+                        } else {
+                            message = message.replace(m[0], '');
+                        }
+                    } else if(print.trim() === 'fumble') {
+                        if(options.length === 1 && !isNaN(parseInt(options[0]))) {
+                            const die = roll.rolls[parseInt(options[0]) - 1];
+                            if(die ? die.total === 1 : false) {
+                                message = message.replace(m[0], print);
+                            } else {
+                                message = message.replace(m[0], '');
+                            }
+                        } else {
+                            message = message.replace(m[0], '');
+                        }
+                    } else {
+                        message = message.replace(m[0], '');
+                    }
+                }
+            }
+            
+            return this.parseRollReferences(message, parser);
+        }
+    }
 
     /**
      * Parses a message for input requests. Prompt tags with the same query will only prompt once and use the same value each additional time the query is requested.
@@ -411,15 +470,20 @@ class FVTTEnhancementSuite extends Application {
      * // default value is an empty string if omitted
      * ?{Query|default value (optional)}
      *
-     * @example <caption>Dropdown examples</caption>
+     * @example <caption>Dropdown example?</caption>
      * ?{Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
      * ?{[list]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
      *
-     * @example <caption>Radio button examples</caption>
+     * @example <caption>Radio button example</caption>
      * ?{[radio]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
      *
      * @example <caption>Checkbox examples</caption>
-     * ?{[checkbox]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+     * // Selected options will be printed out separated by the delimiter of choice (default ", ")
+     * ?{[checkbox|delimiter]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+     * 
+     * // Selected options can be referenced additional times with the following.
+     * // If option was not selected, this tag will be replaced with an empty string.
+     * ?{:option 1 label}
      *
      * @example <caption>Repeating a query to get the same value multiple times</caption>
      * ?{Query} // prompts for a text input
@@ -437,16 +501,17 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} parsed - previously parsed queries
      */
     parsePromptTags(message, resolve, parsed = {}) {
-        const p = message.match(/\?\{(\[(?<listType>(list|checkbox|radio))\])?(?<query>[^\|]+)\|?(?<list>([^,\}\|]+,[^\|\}]+\|?)+)?(?<defaultValue>[^\}]+)?\}/i);
+        const p = message.match(/\?{(?!:)(\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\|([^\]]+)?)?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
         if(!p) {
-            resolve(message);
+            resolve({message: message, references: parsed});
         } else {
             const tag = p[0];
             const listType = p.groups.listType || 'list';
             const query = p.groups.query.trim();
-            const list = p.groups.list || '';
+            const list = p.groups.list;
             const defaultValue = p.groups.defaultValue;
-
+            const optionDelimiter = (p.groups.optionDelimiter || '|, ').substr(1);
+            
             if (list) {
                 let html = '<p>'+query+'</p>';
                 let inputTag = '';
@@ -456,7 +521,7 @@ class FVTTEnhancementSuite extends Application {
                     html += '<p><select class="list-prompt" query="'+query.replace(/"/g, '\\"')+'">';
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
-                        html += '<option value="'+parts[1].trim().replace(/"/g, '\\"')+'">'+parts[0].trim()+'</option>'
+                        html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'">'+parts[0].trim()+'</option>'
                     });
                     html += '</select></p>';
                 } else if (listType === 'checkbox' || listType === 'radio') {
@@ -465,12 +530,13 @@ class FVTTEnhancementSuite extends Application {
                     html += '<form class="list-prompt">';
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
-                        html += '<p><label><input type="'+listType+'" name="prompt-item" value="'+parts[1].trim().replace(/"/g, '\\"')+'" /> '+parts[0].trim()+'</label></p>'
+                        html += '<p><label><input type="'+listType+'" name="'+parts[0].trim().replace(/"/g, '\\"')+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" /> '+parts[0].trim()+'</label></p>'
                     });
                     html += '</form>';
                 }
 
                 if (parsed[query]) {
+                    // Use previous input for repeated queries and selected options
                     this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
                 } else {
                     new Dialog({
@@ -482,14 +548,19 @@ class FVTTEnhancementSuite extends Application {
                                 label: "OK",
                                 callback: () => {
                                     if (listType === 'list') {
-                                        const input = $(inputTag).val();
-                                        parsed[query] = input;
-                                        this.parsePromptTags(message.replace(tag, input), resolve, parsed);
+                                        const inputLabel = $(inputTag+' option:selected').html();
+                                        const inputValue = $(inputTag+' option:selected').val();
+                                        parsed[inputLabel] = inputValue.split(',');
+                                        parsed[query] = [inputValue.split(',')[0]];
+                                        this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
-                                        $(inputTag).serializeArray().forEach(item => { selected.push(item.value) });
-                                        const input = selected.join(', ');
-                                        parsed[query] = input;
+                                        $(inputTag).serializeArray().forEach(item => { 
+                                            selected.push(item.value.split(',')[0]) 
+                                            parsed[item.name] = item.value.split(',');
+                                        });
+                                        const input = selected.join(optionDelimiter);
+                                        parsed[query] = [input];
                                         this.parsePromptTags(message.replace(tag, input), resolve, parsed);
                                     }
                                 }
@@ -499,8 +570,31 @@ class FVTTEnhancementSuite extends Application {
                 }
             } else {
                 const input = parsed[query] || prompt(query, defaultValue != null ? defaultValue.trim() : '');
-                parsed[query] = input;
+                parsed[query] = [input];
                 this.parsePromptTags(message.replace(tag, input || ''), resolve, parsed);
+            }
+        }
+    }
+    
+    parsePromptOptionReferences(message, parsed) {
+        const p = message.match(/\?{:(?<query>[^\|}]+)\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
+        if(!p) {
+            return message;
+        } else {
+            const tag = p[0];
+            const query = p.groups.query.trim();
+            const defaultValue = p.groups.defaultValue || '1';
+            
+            if (parsed[query]) {
+                // Use previous input for repeated queries and selected options
+                let defaultParsed = 0;
+                if(!isNaN(parseInt(defaultValue) || '1')) {
+                    defaultParsed = parseInt(defaultValue) - 1;
+                }
+                return this.parsePromptOptionReferences(message.replace(tag, parsed[query][defaultParsed]), parsed);
+            } else {
+                // This is a reference to a selection option, but the option was not selected. Replace with an empty string.
+                return this.parsePromptOptionReferences(message.replace(tag, ''), parsed);
             }
         }
     }

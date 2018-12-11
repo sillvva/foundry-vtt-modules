@@ -254,3 +254,26 @@ select.list-prompt {
     margin-bottom: 20px;
     font-size: large;
 }
+
+/**
+ * Critical/Fumble
+ */
+span.normal-roll.crit {
+    font-weight: bold;
+    color: green;
+}
+span.normal-roll.fumble {
+    font-weight: bold;
+    color: red;
+}
+span.normal-roll.crit.fumble {
+    font-weight: bold;
+    color: blue;
+}
+
+details.normal-roll {
+    display: none;
+}
+details.normal-roll.crit, details.normal-roll.fumble {
+    display: block;
+}
