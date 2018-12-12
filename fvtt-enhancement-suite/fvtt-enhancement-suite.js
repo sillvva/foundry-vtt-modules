@@ -20,19 +20,31 @@ class FVTTEnhancementSuite extends Application {
     hookReady() {
         this.macros = [];
         Hooks.on('ready', () => {
-            game.settings.register("dnd5e", "macros", {
+            game.settings.register(game.data.system.name, "macros", {
                 name: "Macros",
                 hint: "Macros for quick access to chat commands",
                 default: "[]",
                 type: String,
                 onChange: macros => {
                     this.macros = JSON.parse(macros);
-                    this.renderMacro5eBar();
+                    if (game.data.system.name === 'dnd5e') {
+                        this.renderMacro5eBar();
+                    }
+                }
+            });
+            game.settings.register(game.data.system.name, "promptOptionsMemory", {
+                name: "Prompt Options Memory",
+                hint: "Memory of previously selected options",
+                default: "{}",
+                type: String,
+                onChange: memory => {
+                    this.optMemory = JSON.parse(memory);
                 }
             });
 
+            this.optMemory = JSON.parse(game.settings.get(game.data.system.name, 'promptOptionsMemory'));
+            this.macros = JSON.parse(game.settings.get(game.data.system.name, "macros"));
             if (game.data.system.name === 'dnd5e') {
-                this.macros = JSON.parse(game.settings.get("dnd5e", "macros"));
                 this.renderMacro5eBar();
             }
         });
@@ -259,6 +271,8 @@ class FVTTEnhancementSuite extends Application {
                                 });
                             }
 
+                            console.log(macros);
+
                             game.settings.set("dnd5e", "macros", JSON.stringify(macros));
                         }
                     },
@@ -332,8 +346,16 @@ class FVTTEnhancementSuite extends Application {
 
                     if (macro.type === 'custom') {
                         if (!macro.content) return;
-                        let message = duplicate(macro.content);
-                        this.parseCustomMacro(message);
+                        this.parsePrompts(duplicate(macro.content)).then((parsed) => {
+                            let message = parsed.message;
+                            const references = parsed.references;
+                            message = this.parsePromptOptionReferences(message, references);
+                            message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
+                            const parser = new InlineDiceParser(message);
+                            message = parser.parse();
+                            message = this.parseRollReferences(message, parser);
+                            this.createMessage(message);
+                        });
                     }
 
                     if (macro.type === 'weapon' || macro.type === 'spell') {
@@ -466,32 +488,6 @@ class FVTTEnhancementSuite extends Application {
             "Apply Damage by Type": {
                 icon: '<i class="fas fa-user"></i>',
                 callback: event => this.applyDamageByType(event)
-            }
-        });
-
-        html.find('.message-content').each((i, el) => {
-            this.parseCustomMacro($(el).html(), el);
-        });
-    }
-
-    /**
-     * Parse custom macro HTML
-     * @param msg = content to be parsed
-     * @param el = element to replace content, create new entry if null
-     */
-    parseCustomMacro(msg, el) {
-        this.parsePrompts(msg).then((parsed) => {
-            let message = parsed.message;
-            const references = parsed.references;
-            message = this.parsePromptOptionReferences(message, references);
-            message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
-            const parser = new InlineDiceParser(message);
-            message = parser.parse();
-            message = this.parseRollReferences(message, parser);
-            if (el) {
-                $(el).html(message);
-            } else {
-                this.createMessage(message);
             }
         });
     }
@@ -743,8 +739,11 @@ class FVTTEnhancementSuite extends Application {
      * @param {Object} parsed - previously parsed queries
      */
     parsePromptTags(message, resolve, parsed = {}) {
-        const p = message.match(/\?{(?!:)(\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\|([^\]]+)?)?\])?(?<query>[^\|}]+)\|?(?<list>(([^,{}\|]|{{[^}]+}})+,([^\|{}]|{{[^}]+}})+\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
+        const rgx = "\\?{(?!:)(\\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\\|([^\\]]+)?)?\\])?(?<query>[^\\|}]+)\\|?(?<list>(([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}"
+        const p = message.match(new RegExp(rgx, 'i'));
+        if(!this.optMemory[rgx]) this.optMemory[rgx] = {};
         if (!p) {
+            game.settings.set('dnd5e', 'promptOptionsMemory', JSON.stringify(this.optMemory));
             resolve({message: message, references: parsed});
         } else {
             const tag = p[0];
@@ -763,7 +762,10 @@ class FVTTEnhancementSuite extends Application {
                     html += '<p><select class="list-prompt" query="'+query.replace(/"/g, '\\"')+'">';
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
-                        html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'">'+parts[0].trim()+'</option>'
+                        const liLabel = parts[0].trim();
+                        const selected = this.optMemory[rgx][query] === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
+                        console.log(liLabel, this.optMemory[rgx][query], parts.slice(1).join(',').trim().replace(/"/g, '\\"'));
+                        html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(selected ? 'selected': '')+'>'+parts[0].trim()+'</option>';
                     });
                     html += '</select></p>';
                 } else if (listType === 'checkbox' || listType === 'radio') {
@@ -772,7 +774,10 @@ class FVTTEnhancementSuite extends Application {
                     html += '<form class="list-prompt">';
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
-                        html += '<p><label><input type="'+listType+'" name="'+parts[0].trim().replace(/"/g, '\\"')+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" /> '+parts[0].trim()+'</label></p>'
+                        const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
+                        const checked = this.optMemory[rgx][liLabel] === parts.slice(1).join(',');
+                        if(listType === 'checkbox') delete this.optMemory[rgx][liLabel];
+                        html += '<p><label><input type="'+listType+'" name="'+liLabel+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(checked ? 'checked': '')+' /> '+parts[0].trim()+'</label></p>'
                     });
                     html += '</form>';
                 }
@@ -792,14 +797,16 @@ class FVTTEnhancementSuite extends Application {
                                     if (listType === 'list') {
                                         const inputLabel = $(inputTag+' option:selected').html();
                                         const inputValue = $(inputTag+' option:selected').val();
+                                        this.optMemory[rgx][query] = inputValue;
                                         parsed[inputLabel] = inputValue.split(',');
                                         parsed[query] = [inputValue.split(',')[0]];
                                         this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
                                         $(inputTag).serializeArray().forEach(item => {
-                                            selected.push(item.value.split(',')[0])
+                                            selected.push(item.value.split(',')[0]);
                                             parsed[item.name] = item.value.split(',');
+                                            this.optMemory[rgx][item.name] = item.value;
                                         });
                                         const input = selected.join(optionDelimiter);
                                         parsed[query] = [input];

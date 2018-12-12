@@ -206,11 +206,11 @@
     flex-wrap: wrap;
 }
 .ability-toggles .enable-all {
-    flex: 6; min-width: 90%;
+    flex: 3; min-width: 90%;
     border-bottom: 1px solid #ccc;
 }
 .ability-toggles .enable-one {
-    flex: 1; min-width: 15%;
+    flex: 1; min-width: 30%;
 }
 .ability-toggles label {
     padding: 5px; width: 100%; display: block;
@@ -274,7 +274,7 @@
     padding: 5px;
 }
 .abilities-prompt button {
-    width: calc(100% / 6 - 10px);
+    width: calc(100% / 3 - 10px);
     margin: 5px;
 }
 
