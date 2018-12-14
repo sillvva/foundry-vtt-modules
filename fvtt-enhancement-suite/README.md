@@ -1,5 +1,9 @@
 # Foundry VTT Enhancement Suite
 
+## Download
+
+[Click here](https://github.com/sillvva/foundry-vtt-modules/raw/master/fvtt-enhancement-suite/fvtt-enhancement-suite.zip) to download
+
 ## Documentation:
 
 * [Installation Instructions](https://github.com/sillvva/foundry-vtt-modules/wiki/Module-Installation-Instructions)
