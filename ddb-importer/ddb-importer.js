@@ -1,6 +1,6 @@
 /**
  * @author Matt DeKok <Sillvva>
- * @version 0.1.3
+ * @version 0.1.4
  */
 
 class BeyondImporter extends Application {
@@ -59,7 +59,7 @@ class BeyondImporter extends Application {
      * Hook into the render call for the Enhancement Suite's toolbar5eReady to add an extra button
      */
     hookToolbar5eReady() {
-        Hooks.on('toolbar5eReady', (html) => {
+        Hooks.on('toolbar5eReady', (html, actor) => {
             const importButton = $('<button class="btn btn-small btn-dark import-dndbeyond-sheet" style="min-width: 96%;"><span class="fas fa-file-import"></span> D&D Beyond<br>Character Import</button>');
 
             $('.import-dndbeyond-sheet').remove();
@@ -68,7 +68,7 @@ class BeyondImporter extends Application {
             // Handle button clicks
             importButton.click(ev => {
                 ev.preventDefault();
-                this.importDialog({ actor: null });
+                this.importDialog({ actor: actor });
             });
         });
     }
@@ -184,7 +184,7 @@ class BeyondImporter extends Application {
 
         let obj = {};
 
-        obj['img'] = character.avatarUrl;
+        obj['img'] = this._proxyURL+character.avatarUrl;
         obj['name'] = character.name;
 
         // Set Details
@@ -1420,6 +1420,10 @@ class BeyondImporter extends Application {
         return CONFIG.BeyondImporter[type].find((item) => {
             return item[key] == value;
         });
+    }
+
+    get _proxyURL() {
+        return 'https://cors-anywhere.herokuapp.com/';
     }
 }
 
