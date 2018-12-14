@@ -1,7 +1,7 @@
 /**
  * Foundry VTT Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.0
+ * @version 0.2.1
  */
 
 class FVTTEnhancementSuite extends Application {
@@ -90,7 +90,7 @@ class FVTTEnhancementSuite extends Application {
                 }).click();
             });
 
-            Hooks.call('toolbar5eReady', toolbar);
+            Hooks.call('toolbar5eReady', toolbar, app.actor);
         });
     }
 
@@ -98,7 +98,9 @@ class FVTTEnhancementSuite extends Application {
      * Hook into the render call for the ChatLog
      */
     hookChat() {
-        Hooks.on('renderChatLog', (log, html, data) => this.chatListeners(html));
+        Hooks.on('renderChatLog', (log, html, data) => {
+            this.chatListeners(html);
+        });
     }
 
     /**
@@ -396,16 +398,7 @@ class FVTTEnhancementSuite extends Application {
 
                     if (macro.type === 'custom') {
                         if (!macro.content) return;
-                        this.parsePrompts(duplicate(macro.content)).then((parsed) => {
-                            let message = parsed.message;
-                            const references = parsed.references;
-                            message = this.parsePromptOptionReferences(message, references);
-                            if (game.data.system.name === 'dnd5e') {
-                                message = this.parseActor5eData(message, game.actors.entities.find(actor => actor.data.name === macro.actor.name));
-                            }
-                            const parser = new InlineDiceParser(message);
-                            message = parser.parse();
-                            message = this.parseRollReferences(message, parser);
+                        this.parseMessageContent(macro.content).then(message => {
                             this.createMessage(message);
                         });
                     }
@@ -487,6 +480,28 @@ class FVTTEnhancementSuite extends Application {
                 })
             });
         }
+    }
+
+    /**
+     * Parse message content for custom macro syntax
+     * @param {String} content
+     * @returns {Promise<any>}
+     */
+    parseMessageContent(content) {
+        return new Promise((resolve, reject) => {
+            this.parsePrompts(duplicate(content)).then((parsed) => {
+                let message = parsed.message;
+                const references = parsed.references;
+                message = this.parsePromptOptionReferences(message, references);
+                if (game.data.system.name === 'dnd5e') {
+                    message = this.parseActor5eData(message, game.actors.entities.find(actor => actor.data.name === macro.actor.name));
+                }
+                const parser = new InlineDiceParser(message);
+                message = parser.parse();
+                message = this.parseRollReferences(message, parser);
+                resolve(message);
+            });
+        });
     }
 
     /**
@@ -1043,7 +1058,7 @@ class FVTTEnhancementSuite extends Application {
                     <input type="text" name="label" placeholder="Macro Name" />
                 </div>
                 <div class="macro-content">
-                    <textarea name="content" name="content"></textarea>
+                    <textarea name="content" rows="8"></textarea>
                 </div>
             </div>
         </div>`;
@@ -1207,8 +1222,7 @@ class FVTTEnhancementSuite extends Application {
     }
 
     /**
-     * Data structure update for version 0.1.5 to version 0.1.6
-     *
+     * Data structure update for version 0.1.5 to version 0.2.0
      */
     update015to020() {
         let updated = false;
