@@ -1,7 +1,7 @@
 /**
  * Foundry VTT Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.1.5
+ * @version 0.2.0
  */
 
 class FVTTEnhancementSuite extends Application {
@@ -27,9 +27,7 @@ class FVTTEnhancementSuite extends Application {
                 type: String,
                 onChange: macros => {
                     this.macros = JSON.parse(macros);
-                    if (game.data.system.name === 'dnd5e') {
-                        this.renderMacro5eBar();
-                    }
+                    this.renderMacroBar();
                 }
             });
             game.settings.register(game.data.system.name, "promptOptionsMemory", {
@@ -44,8 +42,8 @@ class FVTTEnhancementSuite extends Application {
 
             this.optMemory = JSON.parse(game.settings.get(game.data.system.name, 'promptOptionsMemory'));
             this.macros = JSON.parse(game.settings.get(game.data.system.name, "macros"));
-            if (game.data.system.name === 'dnd5e') {
-                this.renderMacro5eBar();
+            if(!this.update015to020()) { // Handle update from 0.1.5 to 0.2.0
+                this.renderMacroBar();
             }
         });
     }
@@ -64,12 +62,32 @@ class FVTTEnhancementSuite extends Application {
             windowContent.prepend(toolbar);
 
             // Macro Configuration Button
-            let btnMacros = $('<button class="btn btn-small btn-dark btn-macros"><i class="far fa-keyboard"></i> Macros</button>');
-            toolbar.find('.btn-macros').remove();
-            toolbar.append(btnMacros);
-            btnMacros.click((ev) => {
-                ev.preventDefault();
+            this.addToolbarButton(toolbar, 'far fa-keyboard', 'Macros', () => {
                 this.macro5eDialog(app.actor);
+            });
+
+            // Export Button
+            this.addToolbarButton(toolbar, 'fas fa-download', 'Export Data', () => {
+                this.exportActor(app.actor);
+            });
+
+            // Import Button
+            this.addToolbarButton(toolbar, 'fas fa-upload', 'Import Data', () => {
+                const input = $('<input type="file" accept="application/json" class="file-import hide" />');
+                toolbar.find('.file-import').remove();
+                toolbar.append(input);
+                input.change((e) => {
+                    for (let i = 0; i < e.target.files.length; i++) {
+                        const file = e.target.files[i];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                this.importActor(app.actor, JSON.parse(e.target.result));
+                            };
+                            reader.readAsText(file);
+                        }
+                    }
+                }).click();
             });
 
             Hooks.call('toolbar5eReady', toolbar);
@@ -84,11 +102,32 @@ class FVTTEnhancementSuite extends Application {
     }
 
     /**
+     * Add button to the toolbar
+     * @param toolbar
+     * @param icon
+     * @param label
+     * @param callback
+     * @returns {jQuery|HTMLElement}
+     */
+    addToolbarButton(toolbar, icon, label, callback = () => {}) {
+        const id = label.toLowerCase().replace(/[^a-z0-9]+/gi,'-');
+        const button = $('<button class="btn btn-dark btn-'+id+'"><i class="'+icon+'"></i> '+label+'</button>');
+        toolbar.find('.btn-'+id).remove();
+        toolbar.append(button);
+        button.click((ev) => {
+            ev.preventDefault();
+            callback();
+        });
+        return button;
+    }
+
+    /**
      * Render the 5e macro configuration dialog box
      * @param {Object} actor - actor entity
      */
     macro5eDialog(actor) {
         if (!this.macros) return;
+        const macros = this.macros.filter(macro => actor.data.name === macro.actor.name);
         const items = duplicate(actor.data.items);
         const data = {
             actor: actor,
@@ -101,7 +140,7 @@ class FVTTEnhancementSuite extends Application {
             macros: {
                 weapons: items.filter(item => item.type === 'weapon')
                     .map(item => {
-                        item.enabled = this.macros.find(macro => macro.type === 'weapon' && parseInt(macro.iid) === item.id) != null;
+                        item.enabled = macros.find(macro => macro.type === 'weapon' && parseInt(macro.iid) === item.id) != null;
 
                         let toHit = !isNaN(item.data.bonus.value) ? parseInt(item.data.bonus.value || 0) : 0;
                         toHit += item.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
@@ -121,52 +160,52 @@ class FVTTEnhancementSuite extends Application {
                         }
                     })
                     .map(item => {
-                        item.enabled = this.macros.find(macro => macro.type === 'spell' && parseInt(macro.iid) === item.id) != null;
+                        item.enabled = macros.find(macro => macro.type === 'spell' && parseInt(macro.iid) === item.id) != null;
                         item.school = CONFIG.FVTTEnhancementSuite.spellSchools[item.data.school.value] || item.data.school.value;
                         return item;
                     }),
                 saves: {
-                    prompt: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') || false,
-                    str: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'str') || false,
-                    dex: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'dex') || false,
-                    con: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'con') || false,
-                    int: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'int') || false,
-                    wis: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') || false,
-                    cha: this.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') || false
+                    prompt: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') || false,
+                    str: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'str') || false,
+                    dex: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'dex') || false,
+                    con: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'con') || false,
+                    int: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'int') || false,
+                    wis: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') || false,
+                    cha: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') || false
                 },
                 abilities: {
-                    prompt: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false,
-                    str: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'str') || false,
-                    dex: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dex') || false,
-                    con: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'con') || false,
-                    int: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'int') || false,
-                    wis: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'wis') || false,
-                    cha: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'cha') || false,
-                    acr: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'acr') || false,
-                    ani: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ani') || false,
-                    arc: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'arc') || false,
-                    ath: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ath') || false,
-                    dec: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dec') || false,
-                    his: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'his') || false,
-                    ins: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ins') || false,
-                    itm: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'itm') || false,
-                    inv: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'inv') || false,
-                    med: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'med') || false,
-                    nat: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'nat') || false,
-                    prc: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prc') || false,
-                    prf: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prf') || false,
-                    per: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'per') || false,
-                    rel: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'rel') || false,
-                    slt: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'slt') || false,
-                    ste: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ste') || false,
-                    sur: this.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'sur') || false
+                    prompt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false,
+                    str: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'str') || false,
+                    dex: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dex') || false,
+                    con: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'con') || false,
+                    int: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'int') || false,
+                    wis: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'wis') || false,
+                    cha: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'cha') || false,
+                    acr: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'acr') || false,
+                    ani: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ani') || false,
+                    arc: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'arc') || false,
+                    ath: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ath') || false,
+                    dec: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dec') || false,
+                    his: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'his') || false,
+                    ins: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ins') || false,
+                    itm: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'itm') || false,
+                    inv: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'inv') || false,
+                    med: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'med') || false,
+                    nat: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'nat') || false,
+                    prc: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prc') || false,
+                    prf: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prf') || false,
+                    per: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'per') || false,
+                    rel: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'rel') || false,
+                    slt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'slt') || false,
+                    ste: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ste') || false,
+                    sur: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'sur') || false
                 },
                 tools: items.filter(item => item.type === 'tool')
                     .map(item => {
-                        item.enabled = this.macros.find(macro => macro.type === 'tool' && parseInt(macro.iid) === item.id) != null;
+                        item.enabled = macros.find(macro => macro.type === 'tool' && parseInt(macro.iid) === item.id) != null;
                         return item;
                     }),
-                custom: this.macros.filter(macro => macro.type === 'custom')
+                custom: macros.filter(macro => macro.type === 'custom')
             }
         };
         renderTemplate(this._templatePath+'/macros/macro-5e-configuration.html', data).then(html => {
@@ -178,7 +217,7 @@ class FVTTEnhancementSuite extends Application {
                         icon: '',
                         label: "Save",
                         callback: () => {
-                            let macros = [];
+                            let macros = duplicate(this.macros.filter(macro => macro.actor.name !== actor.data.name));
 
                             // Weapon Macros
                             const weaponEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="weapons-spells"] .weapon');
@@ -190,7 +229,7 @@ class FVTTEnhancementSuite extends Application {
                                     mid: macros.length,
                                     iid: parseInt(wid),
                                     type: 'weapon',
-                                    actor: actor._id,
+                                    actor: { id: actor._id, name: actor.data.name },
                                     label: label
                                 });
                             }
@@ -205,7 +244,7 @@ class FVTTEnhancementSuite extends Application {
                                     mid: macros.length,
                                     iid: parseInt(sid),
                                     type: 'spell',
-                                    actor: actor._id,
+                                    actor: { id: actor._id, name: actor.data.name },
                                     label: label
                                 });
                             }
@@ -220,7 +259,7 @@ class FVTTEnhancementSuite extends Application {
                                     mid: macros.length,
                                     type: 'ability-check',
                                     subtype: subtype,
-                                    actor: actor._id,
+                                    actor: { id: actor._id, name: actor.data.name },
                                     label: label
                                 });
                             }
@@ -235,7 +274,7 @@ class FVTTEnhancementSuite extends Application {
                                     mid: macros.length,
                                     type: 'saving-throw',
                                     subtype: subtype,
-                                    actor: actor._id,
+                                    actor: { id: actor._id, name: actor.data.name },
                                     label: label
                                 });
                             }
@@ -250,7 +289,7 @@ class FVTTEnhancementSuite extends Application {
                                     mid: macros.length,
                                     iid: parseInt(tid),
                                     type: 'tool',
-                                    actor: actor._id,
+                                    actor: { id: actor._id, name: actor.data.name },
                                     label: label
                                 });
                             }
@@ -265,14 +304,13 @@ class FVTTEnhancementSuite extends Application {
                                     mid: macros.length,
                                     cid: i,
                                     type: 'custom',
-                                    actor: actor._id,
+                                    actor: { id: actor._id, name: actor.data.name },
                                     label: label,
                                     content: content
                                 });
                             }
 
                             console.log(macros);
-
                             game.settings.set("dnd5e", "macros", JSON.stringify(macros));
                         }
                     },
@@ -293,13 +331,7 @@ class FVTTEnhancementSuite extends Application {
                     this.addCustomMacroEventListeners(dialog);
                 });
 
-                dialog.element.find('.item[data-tab]').off('click').on('click', (ev) => {
-                    dialog.element.find('.item, .tab').removeClass('active');
-
-                    let tab = ev.target.attributes['data-tab'].value;
-                    dialog.element.find('.item[data-tab="'+tab+'"]').addClass('active');
-                    dialog.element.find('.tab[data-tab="'+tab+'"]').addClass('active');
-                });
+                const tabs = new Tabs(dialog.element.find('.sheet-tabs'));
 
                 dialog.element.find('.weapon *, .spell *, .tool *').off('click').on('click', (ev) => {
                     let el = $(ev.target).closest('.item').find('.enable').get(0);
@@ -331,14 +363,32 @@ class FVTTEnhancementSuite extends Application {
     /**
      * Render the 5e macro bar
      */
-    renderMacro5eBar() {
+    renderMacroBar() {
         $('body .macro-bar').remove();
         if (this.macros.length > 0) {
-            const data = {
-                macros: this.macros
-            };
-            renderTemplate(this._templatePath+'/macros/macro-bar.html', data).then(html => {
-                $('body').append(html);
+            // Get the macros sorted into actors
+            let macroActors = [];
+            this.macros.forEach(macro => {
+                let m = duplicate(macro);
+                if (!game.actors.entities.find(a => a.data.name === m.actor.name)) return;
+                let mai = macroActors.findIndex(ma => ma.name === m.actor.name);
+                if (mai < 0) {
+                    mai = macroActors.length;
+                    macroActors.push(Object.assign(m.actor, {macros: []}));
+                }
+                macroActors[mai].macros.push(m);
+            });
+            macroActors = macroActors.sort((a, b) => a.name > b.name ? 1 : -1);
+            // Render the macro bar template
+            renderTemplate(this._templatePath+'/macros/macro-bar.html', {
+                macroActors: macroActors,
+                macroActorsExist: macroActors.length > 0
+            }).then(html => {
+                const body = $(html);
+                $('body').append(body);
+                if(macroActors.length > 0) {
+                    let tabs = new Tabs(body.find('nav.tabs'), macroActors[0].id);
+                }
 
                 $('.macro-bar [data-macro-id]').click((ev) => {
                     const macroId = parseInt($(ev.target).attr('data-macro-id'));
@@ -350,7 +400,9 @@ class FVTTEnhancementSuite extends Application {
                             let message = parsed.message;
                             const references = parsed.references;
                             message = this.parsePromptOptionReferences(message, references);
-                            message = this.parseActor5eData(message, game.actors.entities.find(actor => actor._id === macro.actor));
+                            if (game.data.system.name === 'dnd5e') {
+                                message = this.parseActor5eData(message, game.actors.entities.find(actor => actor.data.name === macro.actor.name));
+                            }
                             const parser = new InlineDiceParser(message);
                             message = parser.parse();
                             message = this.parseRollReferences(message, parser);
@@ -358,75 +410,77 @@ class FVTTEnhancementSuite extends Application {
                         });
                     }
 
-                    if (macro.type === 'weapon' || macro.type === 'spell') {
-                        let actor = game.actors.entities.find(a => a._id === macro.actor).data;
-                        let itemId = Number(macro.iid),
-                            Item = CONFIG.Item.entityClass,
-                            item = new Item(actor.items.find(i => i.id === itemId), actor);
-                        item.roll();
-                    }
-
-                    if (macro.type === 'tool') {
-                        let actor = game.actors.entities.find(a => a._id === macro.actor);
-                        let itemId = Number(macro.iid),
-                            Item = CONFIG.Item.entityClass,
-                            item = new Item(actor.items.find(i => i.id === itemId), actor);
-                        item.roll();
-                    }
-
-                    if (macro.type === 'saving-throw') {
-                        let actor = game.actors.entities.find(a => a._id === macro.actor);
-                        if (macro.subtype === 'prompt') {
-                            const dialog = new Dialog({
-                                title: "Saving Throw",
-                                content: this._saves5ePromptHtml
-                            }).render(true);
-
-                            setTimeout(() => {
-                                ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
-                                    dialog.element.find('.'+abl).off('click').on('click', () => {
-                                        dialog.close();
-                                        actor.rollAbilitySave(abl);
-                                    });
-                                });
-                            }, 10);
-                        } else {
-                            actor.rollAbilitySave(macro.subtype);
+                    if (game.data.system.name == 'dnd5e') {
+                        if (macro.type === 'weapon' || macro.type === 'spell') {
+                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
+                            let itemId = Number(macro.iid),
+                                Item = CONFIG.Item.entityClass,
+                                item = new Item(actor.items.find(i => i.id === itemId), actor);
+                            item.roll();
                         }
-                    }
 
-                    if (macro.type === 'ability-check') {
-                        let actor = game.actors.entities.find(a => a._id === macro.actor);
-                        if (macro.subtype === 'prompt') {
-                            const dialog = new Dialog({
-                                title: "Ability Checks",
-                                content: this._abilities5ePromptHtml
-                            }, { width: 600 }).render(true);
+                        if (macro.type === 'tool') {
+                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
+                            let itemId = Number(macro.iid),
+                                Item = CONFIG.Item.entityClass,
+                                item = new Item(actor.items.find(i => i.id === itemId), actor);
+                            item.roll();
+                        }
 
-                            setTimeout(() => {
-                                ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
-                                    dialog.element.find('.'+abl).off('click').on('click', () => {
-                                        dialog.close();
-                                        actor.rollAbilityTest(abl);
+                        if (macro.type === 'saving-throw') {
+                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
+                            if (macro.subtype === 'prompt') {
+                                const dialog = new Dialog({
+                                    title: "Saving Throw",
+                                    content: this._saves5ePromptHtml
+                                }).render(true);
+
+                                setTimeout(() => {
+                                    ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
+                                        dialog.element.find('.'+abl).off('click').on('click', () => {
+                                            dialog.close();
+                                            actor.rollAbilitySave(abl);
+                                        });
                                     });
-                                });
-                                ['acr', 'ani', 'arc', 'ath', 'dec', 'his',
-                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
-                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].forEach((skl) => {
-                                    dialog.element.find('.'+skl).off('click').on('click', () => {
-                                        dialog.close();
-                                        actor.rollSkill(skl);
-                                    });
-                                });
-                            }, 10);
-                        } else {
-                            if (['str', 'dex', 'con', 'int', 'wis', 'cha'].indexOf(macro.subtype) >= 0) {
+                                }, 10);
+                            } else {
                                 actor.rollAbilitySave(macro.subtype);
                             }
-                            if (['acr', 'ani', 'arc', 'ath', 'dec', 'his',
-                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
-                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].indexOf(macro.subtype) >= 0) {
-                                actor.rollSkill(macro.subtype);
+                        }
+
+                        if (macro.type === 'ability-check') {
+                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
+                            if (macro.subtype === 'prompt') {
+                                const dialog = new Dialog({
+                                    title: "Ability Checks",
+                                    content: this._abilities5ePromptHtml
+                                }, { width: 600 }).render(true);
+
+                                setTimeout(() => {
+                                    ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
+                                        dialog.element.find('.'+abl).off('click').on('click', () => {
+                                            dialog.close();
+                                            actor.rollAbilityTest(abl);
+                                        });
+                                    });
+                                    ['acr', 'ani', 'arc', 'ath', 'dec', 'his',
+                                        'ins', 'itm', 'inv', 'med', 'nat', 'prc',
+                                        'prf', 'per', 'rel', 'slt', 'ste', 'sur'].forEach((skl) => {
+                                        dialog.element.find('.'+skl).off('click').on('click', () => {
+                                            dialog.close();
+                                            actor.rollSkill(skl);
+                                        });
+                                    });
+                                }, 10);
+                            } else {
+                                if (['str', 'dex', 'con', 'int', 'wis', 'cha'].indexOf(macro.subtype) >= 0) {
+                                    actor.rollAbilitySave(macro.subtype);
+                                }
+                                if (['acr', 'ani', 'arc', 'ath', 'dec', 'his',
+                                        'ins', 'itm', 'inv', 'med', 'nat', 'prc',
+                                        'prf', 'per', 'rel', 'slt', 'ste', 'sur'].indexOf(macro.subtype) >= 0) {
+                                    actor.rollSkill(macro.subtype);
+                                }
                             }
                         }
                     }
@@ -916,7 +970,7 @@ class FVTTEnhancementSuite extends Application {
      * @private
      */
     _parseActorSubdata(data, key) {
-        if (typeof data === 'object') {
+        if (typeof data === 'object' && data != null) {
             let info = [];
             Object.keys(data).forEach(nextkey => {
                 if (typeof data[nextkey] !== 'object' && ['value', 'max', 'mod', 'save'].indexOf(nextkey) < 0) return;
@@ -926,6 +980,35 @@ class FVTTEnhancementSuite extends Application {
                 }
                 else {
                     info = info.concat(subdata);
+                }
+            });
+            return info;
+        }
+        else {
+            return { name: key, value: data };
+        }
+    }
+
+    /**
+     * Iterate through the actor data to get name/value pairs
+     * @param {Object | String} data - actor data being looped through
+     * @returns {Object} - an array of name/value pairs
+     * @private
+     */
+    _parseActorEntity(data, key) {
+        if (typeof data === 'object' && data != null) {
+            let info = {};
+            Object.keys(data).forEach(nextkey => {
+                let subdata = this._parseActorEntity(data[nextkey], key+'.'+nextkey);
+                if (subdata.hasOwnProperty('name')) {
+                    const name = subdata.name.replace('data.','');
+                    const value = subdata.value;
+                    info[name] = value;
+                }
+                else {
+                    Object.keys(subdata).forEach(d => {
+                        info[d] = subdata[d];
+                    });
                 }
             });
             return info;
@@ -1015,6 +1098,134 @@ class FVTTEnhancementSuite extends Application {
             <button class="ste">Stealth</button>
             <button class="sur">Survival</button>
         </div>`;
+    }
+
+    /**
+     * Get actor and macro data. Export them together
+     * @param actor
+     */
+    exportActor(actor) {
+        const data = this._parseActorEntity(actor.data, 'data');
+        let actorEntity = {};
+        for(let [key, val] of Object.entries(data)) {
+            if(key.match(/permission\.|folder|token\.|_id/)) continue;
+            actorEntity[key] = val;
+        }
+
+        let actorData = {
+            macros: this.macros.filter(macro => macro.actor.id === actor._id || macro.actor === actor._id).map(macro => {
+                macro.actor = { id: actor._id, name: actor.data.name };
+                return macro;
+            }),
+            actor: actorEntity
+        };
+
+        const blob = new Blob([JSON.stringify(actorData)], { type: "application/json;charset=utf-8" });
+        const fileURL = URL.createObjectURL(blob);
+        const win = window.open();
+        const element = win.document.createElement('a');
+        $(element)
+            .attr('href', fileURL)
+            .attr('download', actor.data.name.replace(/[^_\-a-z0-9 ]/gi, '')+'.json');
+        win.document.body.appendChild(element);
+        element.click();
+        win.close();
+    }
+
+    /**
+     * Import .json file to actor
+     * @param actor
+     */
+    importActor(actor, data) {
+        if(!data.actor && !data.macros) throw "Invalid data imported";
+        const obj = {};
+        const s = {};
+        const items = [];
+        for (let [key, val] of Object.entries(data.actor)) {
+            if(key.substr(0, 5) === 'items') {
+                let iKey = key.replace('items.', '').split('.');
+                const i = parseInt(iKey[0]);
+                if (!items[i]) {
+                    items[i] = {};
+                }
+                iKey = iKey.splice(1);
+                iKey.reduce((t, e) => {
+                    if (e === iKey.slice(-1)[0]) {
+                        t[e] = val;
+                    } else if(!t[e]) {
+                        t[e] = {};
+                    }
+                    return t[e];
+                }, items[i])
+            } else {
+                obj[key] = val;
+            }
+        }
+        actor.update(obj, true);
+        this.parseItems(actor, items);
+
+        const macros = this.macros.filter(macro => macro.actor.name !== obj['name']).concat(data.macros.map(macro => {
+            macro.actor = { id: actor._id, name: obj['name'] };
+            return macro;
+        }));
+        game.settings.set(game.data.system.name, 'macros', JSON.stringify(macros));
+    }
+
+    /**
+     * Parse actor items
+     *
+     * @param {Object} actorEntity - The Actor5e entity
+     * @param {Number} items - an array of items being added
+     * @param {Number} i - Optional. Leave blank on initial call.
+     */
+    parseItems(actorEntity, items, i = 0) {
+        if(items == null) return;
+        if(items.length === 0) return;
+
+        let it = actorEntity.data.items.filter(item => {
+            if(item.type === 'class') return item.name === items[i].name;
+            if(item.type === 'weapon') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'equipment') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'backpack') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'consumable') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'tool') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'spell') return item.data.source.value === items[i].data.source.value;
+            return false;
+        });
+        if(it.length > 0) {
+            actorEntity.updateOwnedItem(it, items[i]);
+        }
+        else {
+            actorEntity.createOwnedItem(items[i], true);
+        }
+
+        if(items.length > i + 1) {
+            setTimeout(() => {
+                this.parseItems(actorEntity, items, i + 1);
+            }, 100);
+        }
+    }
+
+    /**
+     * Data structure update for version 0.1.5 to version 0.1.6
+     *
+     */
+    update015to020() {
+        let updated = false;
+        this.macros = this.macros.map(macro => {
+            if (typeof macro.actor === 'string') {
+                let actor = game.actors.entities.find(a => a._id === macro.actor);
+                if (actor) {
+                    macro.actor = { id: macro.actor, name: actor.data.name };
+                    updated = true;
+                }
+            }
+            return macro;
+        });
+        if (updated) {
+            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros));
+        }
+        return updated;
     }
 }
 
