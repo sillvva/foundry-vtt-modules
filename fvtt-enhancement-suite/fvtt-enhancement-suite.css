@@ -12,6 +12,10 @@
     flex: 1;
 }
 
+#chat-log .message .message-header .message-sender {
+    flex: 2;
+}
+
 /**
  * Actor Sheet Toolbar
  */
@@ -42,7 +46,7 @@
     height: 30px;
     background: rgba(0,0,0,0.7);
     border-radius: 5px 5px 0 0;
-    padding: 6px 8px;
+    padding: 5px 8px;
     color: #fff;
     text-shadow: 1px 1px 1px #000;
 }
@@ -59,7 +63,6 @@
 .actor-sheet-toolbar .btn {
     display: inline-block;
     width: 100%;
-    min-width: 96%;
     margin-bottom: 8px;
     font-weight: 400;
     text-align: left;
@@ -145,16 +148,16 @@
     border-bottom: 1px solid #ccc;
 }
 .macro-sheet .weapons-header {
-    font-weight: bold; background: rgba(0,0,0,0.15)
+    font-weight: bold;
 }
-.macro-sheet .weapon-enable {
-    max-width: 20px;
+.macro-sheet .weapons-header .weapon-enable {
+    width: 20px;
 }
 .macro-sheet .weapons-header *, .macro-sheet .weapon * {
     flex: 1; text-align: center;
 }
 .macro-sheet .weapon-name {
-    flex: 2; text-align: left;
+    flex: 2;
 }
 
 /**
@@ -166,20 +169,20 @@
     border-bottom: 1px solid #ccc;
 }
 .macro-sheet .spells-header {
-    font-weight: bold; background: rgba(0,0,0,0.15)
+    font-weight: bold;
 }
-.macro-sheet .spell-enable {
-    max-width: 20px;
+.macro-sheet .spells-header .spell-enable {
+    width: 20px;
 }
 .macro-sheet .spells-header *, .macro-sheet .spell * {
     flex: 1; text-align: center;
 }
 .macro-sheet .spell-name {
-    flex: 2; text-align: left;
+    flex: 2;
 }
 
 /**
- * Saving Throws Configuration
+ * Saving Throw Macros
  */
 .save-toggles {
     width: 600px;
@@ -196,9 +199,17 @@
 .save-toggles label {
     padding: 5px; width: 100%; display: block;
 }
+.saves-prompt {
+    display: flex; flex-wrap: wrap;
+    margin: -3px;
+}
+.saves-prompt > * {
+    flex: 1; margin: 3px;
+    min-width: 30%;
+}
 
 /**
- * Ability Checks Configuration
+ * Ability Check Macros
  */
 .ability-toggles {
     width: 600px;
@@ -215,6 +226,14 @@
 .ability-toggles label {
     padding: 5px; width: 100%; display: block;
 }
+.abilities-prompt {
+    display: flex; flex-wrap: wrap;
+    margin: -3px;
+}
+.abilities-prompt > * {
+    flex: 1; margin: 3px;
+    min-width: 30%;
+}
 
 /**
  * Tools Configuration
@@ -225,87 +244,72 @@
     border-bottom: 1px solid #ccc;
 }
 .macro-sheet .tools-header {
-    font-weight: bold; background: rgba(0,0,0,0.15);
+    font-weight: bold;
 }
-.macro-sheet .tool-enable {
-    max-width: 20px;
+.macro-sheet .tools-header .tool-enable {
+    width: 20px;
 }
 .macro-sheet .tools-header *, .macro-sheet .tool * {
     flex: 1; text-align: center;
 }
 .macro-sheet .tool-name {
-    flex: 2; text-align: left;
+    flex: 2;
+}
+
+/**
+ * Default Roll Parsing
+ */
+.damage-card span.normal-roll.crit {
+    font-weight: bold; color: green;
+}
+.damage-card span.normal-roll.fumble {
+    font-weight: bold; color: red;
+}
+.damage-card span.normal-roll.crit.fumble {
+    font-weight: bold; color: blue;
+}
+.damage-card details.normal-roll {
+    display: none;
+}
+.damage-card details.normal-roll.crit {
+    display: block;
 }
 
 /**
  * Macro Bar
  */
 .macro-bar {
-    position: absolute; overflow: hidden;
-    padding: 8px 0 0 8px; border-radius: 5px; z-index: 70;
+    position: absolute; overflow: hidden; border-radius: 5px;
+    z-index: 70; display: flex; flex-direction: column;
 }
 .macro-bar.macro-bar-bottom {
     bottom: 5px; left: 230px; right: 315px;
     background: rgba(0,0,0,0.4);
 }
-.macro-bar > * {
-    float: left; width: auto; margin: 0 8px 8px 0;
+.macro-bar .tabs {
+    border-bottom: 1px solid #666; flex-wrap: wrap;
 }
-
-/**
- * Saving Throw Prompt
- */
-.saves-prompt {
-    display: flex;
-    flex-wrap: wrap;
-    padding: 5px;
+.macro-bar .tabs > .item {
+    color: #fff;
+    line-height: 32px;
+    padding: 0 10px;
+    border-radius: 5px 5px 0 0;
+    background-color: rgba(0,0,0,0.5);
+    flex: 0;
+    white-space: nowrap;
+    border: 0 solid #000;
+    border-width: 1px 1px 0 0;
 }
-.saves-prompt button {
-    width: calc(100% / 3 - 10px);
-    margin: 5px;
+.macro-bar .tabs > .item.active {
+    font-weight: 700;
+    border: 1px solid #666;
+    border-bottom: none;
+    box-shadow: 0 0 10px inset #000;
+    text-shadow: none;
 }
-
-/**
- * Saving Throw Prompt
- */
-.abilities-prompt {
-    display: flex;
-    flex-wrap: wrap;
-    padding: 5px;
+.macro-bar .tab {
+    padding: 8px; line-height: 25px;
 }
-.abilities-prompt button {
-    width: calc(100% / 3 - 10px);
-    margin: 5px;
-}
-
-/**
- * List Prompt
- */
-select.list-prompt {
-    width: 100%;
-    margin-bottom: 20px;
-    font-size: large;
-}
-
-/**
- * Critical/Fumble
- */
-span.normal-roll.crit {
-    font-weight: bold;
-    color: green;
-}
-span.normal-roll.fumble {
-    font-weight: bold;
-    color: red;
-}
-span.normal-roll.crit.fumble {
-    font-weight: bold;
-    color: blue;
-}
-
-details.normal-roll {
-    display: none;
-}
-details.normal-roll.crit, details.normal-roll.fumble {
-    display: block;
+.macro-bar .tab > * {
+    float: left; width: auto; margin-right: 8px;
 }
