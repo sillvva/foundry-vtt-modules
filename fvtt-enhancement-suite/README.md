@@ -1,5 +1,9 @@
 # Foundry VTT Enhancement Suite
 
+## Compatibility
+
+Requires FVTT version 0.0.9 or higher.
+
 ## Documentation:
 
 * [Macros](https://github.com/sillvva/foundry-vtt-modules/wiki/Macros)
