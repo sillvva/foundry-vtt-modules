@@ -1,17 +1,22 @@
-<form class="dnd5e macro-sheet {{cssClass}}" autocomplete="off" data-actor-id="{{actor._id}}">
+<form class="{{system}} macro-sheet {{cssClass}}" autocomplete="off" data-actor-id="{{actor._id}}">
     <nav class="sheet-tabs tabs" data-tab-container="primary">
         {{#if hasMacros.weaponsSpells}}
-        <a class="item flex-1 active" data-tab="weapons-spells">Weapons&nbsp;&amp;&nbsp;Spells</a>
+        <a class="item flex-1" data-tab="weapons-spells">Weapons&nbsp;&amp;&nbsp;Spells</a>
         {{/if}}
+        {{#if hasMacros.saves5e}}
         <a class="item flex-1" data-tab="saving-throws">Saving&nbsp;Throws</a>
+        {{/if}}
+        {{#if hasMacros.abilities5e}}
         <a class="item flex-1" data-tab="ability-checks">Ability&nbsp;Checks</a>
+        {{/if}}
         {{#if hasMacros.tools}}
         <a class="item flex-1" data-tab="tools">Tools</a>
         {{/if}}
         <a class="item flex-1" data-tab="custom">Custom</a>
     </nav>
 
-    <div class="tab active" data-tab="weapons-spells">
+    {{#if hasMacros.weaponsSpells}}
+    <div class="tab" data-tab="weapons-spells">
         <div class="macros">
             {{#if hasMacros.weapons}}
             <div class="weapons-header">
@@ -51,7 +56,9 @@
             {{/if}}
         </div>
     </div>
+    {{/if}}
 
+    {{#if hasMacros.saves5e}}
     <div class="tab" data-tab="saving-throws">
         <div class="macros">
             <div class="save-toggles">
@@ -100,7 +107,9 @@
             </div>
         </div>
     </div>
+    {{/if}}
 
+    {{#if hasMacros.abilities5e}}
     <div class="tab" data-tab="ability-checks">
         <div class="macros">
             <div class="ability-toggles">
@@ -260,7 +269,9 @@
             </div>
         </div>
     </div>
+    {{/if}}
 
+    {{#if hasMacros.tools}}
     <div class="tab" data-tab="tools">
         <div class="macros">
             <div class="tools-header">
@@ -275,6 +286,7 @@
             {{/each}}
         </div>
     </div>
+    {{/if}}
 
     <div class="tab" data-tab="custom">
         <div class="macros">

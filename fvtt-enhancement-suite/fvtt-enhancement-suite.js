@@ -1,7 +1,7 @@
 /**
  * Foundry VTT Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.2
+ * @version 0.2.3
  */
 
 class FVTTEnhancementSuite {
@@ -63,6 +63,9 @@ class FVTTEnhancementSuite {
      * Hook into the render call for the Actor5eSheet
      */
     hookActor5eSheet() {
+        Hooks.on('renderActorSheet', (app, html, data) => {
+
+        });
         Hooks.on('renderActor5eSheet', (app, html, data) => {
             if (!data.owner) return;
 
@@ -74,7 +77,7 @@ class FVTTEnhancementSuite {
 
             // Macro Configuration Button
             this.addToolbarButton(toolbar, 'far fa-keyboard', 'Macros', () => {
-                this.macro5eDialog(app.actor);
+                this.macroDialog(app.actor);
             });
 
             // Export Button
@@ -143,6 +146,32 @@ class FVTTEnhancementSuite {
         Hooks.on('renderChatLog', (log, html, data) => {
             this.chatListeners(html);
         });
+        Hooks.on('chatMessage', (chatLog, chatData) => {
+            const hasMacro = chatData.content.match(/{{.+}}|\[\[.+\]\]|<<.+>>|\?{.+}|@{.+}/);
+            if (hasMacro) {
+                const hasRoll = chatData.roll;
+                if (hasRoll) delete chatData.roll;
+                setTimeout(() => {
+                    const cTokens = canvas.tokens.controlledTokens;
+                    if (cTokens.length === 1) {
+                        var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
+                    }
+                    this.parseMessageContent(chatData.content, actor, !hasRoll).then(content => {
+                        const message = game.messages.entities.pop();
+                        $(`.message[data-message-id="${message.data._id}"]`).remove();
+                        message.delete(true);
+                        if (hasRoll) {
+                            const data = Roll._getActorData();
+                            const roll = new Roll(content, data);
+                            roll.toMessage();
+                        } else {
+                            ChatMessage.create({ user: game.user._id, content: content }, true);
+                        }
+                    });
+                }, 50);
+                return false;
+            }
+        });
     }
 
     /**
@@ -197,20 +226,23 @@ class FVTTEnhancementSuite {
     }
 
     /**
-     * Render the 5e macro configuration dialog box
+     * Render the macro configuration dialog box
      * @param {Object} actor - actor entity
      */
-    macro5eDialog(actor) {
+    macroDialog(actor) {
         if (!this.macros) return;
         const macros = this.macros.filter(macro => actor.data.name === macro.actor.name);
         const items = duplicate(actor.data.items);
         const data = {
             actor: actor,
+            system: game.data.system.name,
             hasMacros: {
                 weaponsSpells: items.filter(item => item.type === 'weapon' || item.type === 'spell').length > 0,
                 weapons: items.filter(item => item.type === 'weapon').length > 0,
                 spells: items.filter(item => item.type === 'spell').length > 0,
-                tools: items.filter(item => item.type === 'tool').length > 0
+                tools: items.filter(item => item.type === 'tool').length > 0,
+                abilities5e: false,
+                saves5e: false
             },
             macros: {
                 weapons: items.filter(item => item.type === 'weapon')
@@ -239,17 +271,18 @@ class FVTTEnhancementSuite {
                         item.school = CONFIG.FVTTEnhancementSuite.spellSchools[item.data.school.value] || item.data.school.value;
                         return item;
                     }),
-                saves: {
-                    prompt: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') || false,
-                    str: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'str') || false,
-                    dex: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'dex') || false,
-                    con: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'con') || false,
-                    int: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'int') || false,
-                    wis: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') || false,
-                    cha: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') || false
-                },
-                abilities: {
-                    prompt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false,
+                tools: items.filter(item => item.type === 'tool')
+                    .map(item => {
+                        item.enabled = macros.find(macro => macro.type === 'tool' && parseInt(macro.iid) === item.id) != null;
+                        return item;
+                    }),
+                custom: macros.filter(macro => macro.type === 'custom')
+            }
+        };
+        if (game.data.system.name === CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
+            data.hasMacros.abilities5e = true;
+            data.macros.abilities = {
+                prompt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false,
                     str: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'str') || false,
                     dex: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dex') || false,
                     con: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'con') || false,
@@ -274,16 +307,20 @@ class FVTTEnhancementSuite {
                     slt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'slt') || false,
                     ste: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ste') || false,
                     sur: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'sur') || false
-                },
-                tools: items.filter(item => item.type === 'tool')
-                    .map(item => {
-                        item.enabled = macros.find(macro => macro.type === 'tool' && parseInt(macro.iid) === item.id) != null;
-                        return item;
-                    }),
-                custom: macros.filter(macro => macro.type === 'custom')
-            }
-        };
-        renderTemplate(this._templatePath+'/macros/macro-5e-configuration.html', data).then(html => {
+            };
+
+            data.hasMacros.saves5e = true;
+            data.macros.saves = {
+                prompt: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') || false,
+                    str: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'str') || false,
+                    dex: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'dex') || false,
+                    con: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'con') || false,
+                    int: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'int') || false,
+                    wis: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') || false,
+                    cha: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') || false
+            };
+        }
+        renderTemplate(this._templatePath+'/macros/macro-configuration.html', data).then(html => {
             const dialog = new Dialog({
                 title: "Macro Configuration",
                 content: html,
@@ -294,79 +331,89 @@ class FVTTEnhancementSuite {
                         callback: () => {
                             let macros = duplicate(this.macros.filter(macro => macro.actor.name !== actor.data.name));
 
-                            // Weapon Macros
-                            const weaponEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="weapons-spells"] .weapon');
-                            for(let i = 0; i < weaponEntries.length; i++) {
-                                if (!$(weaponEntries[i]).find('.enable').get(0).checked) continue;
-                                let label = $(weaponEntries[i]).find('.weapon-name').html();
-                                let wid = $(weaponEntries[i]).attr('data-weapon-id');
-                                macros.push({
-                                    mid: macros.length,
-                                    iid: parseInt(wid),
-                                    type: 'weapon',
-                                    actor: { id: actor._id, name: actor.data.name },
-                                    label: label
-                                });
+                            if (data.hasMacros.weapons) {
+                                // Weapon Macros
+                                const weaponEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="weapons-spells"] .weapon');
+                                for(let i = 0; i < weaponEntries.length; i++) {
+                                    if (!$(weaponEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(weaponEntries[i]).find('.weapon-name').html();
+                                    let wid = $(weaponEntries[i]).attr('data-weapon-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(wid),
+                                        type: 'weapon',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
                             }
 
-                            // Spell Macros
-                            const spellEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="weapons-spells"] .spell');
-                            for(let i = 0; i < spellEntries.length; i++) {
-                                if (!$(spellEntries[i]).find('.enable').get(0).checked) continue;
-                                let label = $(spellEntries[i]).find('.spell-name').html();
-                                let sid = $(spellEntries[i]).attr('data-spell-id');
-                                macros.push({
-                                    mid: macros.length,
-                                    iid: parseInt(sid),
-                                    type: 'spell',
-                                    actor: { id: actor._id, name: actor.data.name },
-                                    label: label
-                                });
+                            if (data.hasMacros.spells) {
+                                // Spell Macros
+                                const spellEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="weapons-spells"] .spell');
+                                for(let i = 0; i < spellEntries.length; i++) {
+                                    if (!$(spellEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(spellEntries[i]).find('.spell-name').html();
+                                    let sid = $(spellEntries[i]).attr('data-spell-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(sid),
+                                        type: 'spell',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
                             }
 
-                            // Ability Check Macros
-                            const abilityEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="ability-checks"] input[type="checkbox"]');
-                            for(let i = 0; i < abilityEntries.length; i++) {
-                                if (!$(abilityEntries[i]).get(0).checked) continue;
-                                let label = $(abilityEntries[i]).attr('name');
-                                let subtype = $(abilityEntries[i]).attr('class');
-                                macros.push({
-                                    mid: macros.length,
-                                    type: 'ability-check',
-                                    subtype: subtype,
-                                    actor: { id: actor._id, name: actor.data.name },
-                                    label: label
-                                });
+                            if (data.hasMacros.abilities5e) {
+                                // Ability Check Macros
+                                const abilityEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="ability-checks"] input[type="checkbox"]');
+                                for(let i = 0; i < abilityEntries.length; i++) {
+                                    if (!$(abilityEntries[i]).get(0).checked) continue;
+                                    let label = $(abilityEntries[i]).attr('name');
+                                    let subtype = $(abilityEntries[i]).attr('class');
+                                    macros.push({
+                                        mid: macros.length,
+                                        type: 'ability-check',
+                                        subtype: subtype,
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
                             }
 
-                            // Saving Throw Macros
-                            const saveEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="saving-throws"] input[type="checkbox"]');
-                            for(let i = 0; i < saveEntries.length; i++) {
-                                if (!$(saveEntries[i]).get(0).checked) continue;
-                                let label = $(saveEntries[i]).attr('name');
-                                let subtype = $(saveEntries[i]).attr('class');
-                                macros.push({
-                                    mid: macros.length,
-                                    type: 'saving-throw',
-                                    subtype: subtype,
-                                    actor: { id: actor._id, name: actor.data.name },
-                                    label: label
-                                });
+                            if (data.hasMacros.saves5e) {
+                                // Saving Throw Macros
+                                const saveEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="saving-throws"] input[type="checkbox"]');
+                                for(let i = 0; i < saveEntries.length; i++) {
+                                    if (!$(saveEntries[i]).get(0).checked) continue;
+                                    let label = $(saveEntries[i]).attr('name');
+                                    let subtype = $(saveEntries[i]).attr('class');
+                                    macros.push({
+                                        mid: macros.length,
+                                        type: 'saving-throw',
+                                        subtype: subtype,
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
                             }
 
-                            // Tool Macros
-                            const toolEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="tools"] .tool');
-                            for(let i = 0; i < toolEntries.length; i++) {
-                                if (!$(toolEntries[i]).find('.enable').get(0).checked) continue;
-                                let label = $(toolEntries[i]).find('.tool-name').html();
-                                let tid = $(toolEntries[i]).attr('data-tool-id');
-                                macros.push({
-                                    mid: macros.length,
-                                    iid: parseInt(tid),
-                                    type: 'tool',
-                                    actor: { id: actor._id, name: actor.data.name },
-                                    label: label
-                                });
+                            if (data.hasMacros.tools) {
+                                // Tool Macros
+                                const toolEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="tools"] .tool');
+                                for(let i = 0; i < toolEntries.length; i++) {
+                                    if (!$(toolEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(toolEntries[i]).find('.tool-name').html();
+                                    let tid = $(toolEntries[i]).attr('data-tool-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(tid),
+                                        type: 'tool',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
                             }
 
                             // Custom Macros
@@ -385,7 +432,7 @@ class FVTTEnhancementSuite {
                                 });
                             }
 
-                            game.settings.set("dnd5e", "macros", JSON.stringify(macros));
+                            game.settings.set(game.data.system.name, "macros", JSON.stringify(macros));
                         }
                     },
                     "cancel": {
@@ -475,7 +522,7 @@ class FVTTEnhancementSuite {
                         });
                     }
 
-                    if (game.data.system.name == 'dnd5e') {
+                    if (game.data.system.name == CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
                         if (macro.type === 'weapon' || macro.type === 'spell') {
                             let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
                             let itemId = Number(macro.iid),
@@ -556,20 +603,22 @@ class FVTTEnhancementSuite {
 
     /**
      * Parse message content for custom macro syntax
-     * @param {String} content
+     * @param content
+     * @param actor
+     * @param toolTips
      * @returns {Promise<any>}
      */
-    parseMessageContent(content, actor) {
+    parseMessageContent(content, actor, toolTips = true) {
         return new Promise((resolve, reject) => {
             this.parsePrompts(duplicate(content)).then((parsed) => {
                 let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
                 if (actor) {
-                    if (game.data.system.name === 'dnd5e') {
+                    if (game.data.system.name === CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
                         message = this.parseActor5eData(message, actor.name ? game.actors.entities.find(a => a.data.name === actor.name) : actor);
                     }
                 }
                 const parser = new InlineDiceParser(message);
-                message = parser.parse();
+                message = parser.parse(toolTips);
                 message = this.parseRollReferences(message, parser);
                 resolve(message);
             });
@@ -896,7 +945,7 @@ class FVTTEnhancementSuite {
         const p = message.match(new RegExp(rgx, 'i'));
         if(!this.optMemory[rgx]) this.optMemory[rgx] = {};
         if (!p) {
-            game.settings.set('dnd5e', 'promptOptionsMemory', JSON.stringify(this.optMemory));
+            game.settings.set(game.data.system.name, 'promptOptionsMemory', JSON.stringify(this.optMemory));
             resolve({message: message, references: parsed});
         } else {
             const tag = p[0];
@@ -1052,7 +1101,7 @@ class FVTTEnhancementSuite {
         }).filter(field => {
             return ['biography', 'speed'].indexOf(field.name) < 0 && field.name.indexOf('skills.') < 0;
         });
-        if (game.data.system.name === 'dnd5e') {
+        if (game.data.system.name === CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
             actor.data.items.filter(item => item.type === 'class').forEach((item, i) => {
                 actorInfo.push({ name: 'class'+(i+1), value: item.name });
                 actorInfo.push({ name: 'class'+(i+1)+'.subclass', value: item.data.subclass.value });
@@ -1065,6 +1114,7 @@ class FVTTEnhancementSuite {
     /**
      * Iterate through the actor data to get name/value pairs
      * @param {Object | String} data - actor data being looped through
+     * @param key
      * @returns {Object} - an array of name/value pairs
      * @private
      */
@@ -1091,6 +1141,7 @@ class FVTTEnhancementSuite {
     /**
      * Iterate through the actor data to get name/value pairs
      * @param {Object | String} data - actor data being looped through
+     * @param key
      * @returns {Object} - an array of name/value pairs
      * @private
      */
@@ -1234,6 +1285,7 @@ class FVTTEnhancementSuite {
     /**
      * Import .json file to actor
      * @param actor
+     * @param data
      */
     importActor(actor, data) {
         if(!data.actor && !data.macros) throw "Invalid data imported";
@@ -1328,6 +1380,9 @@ class FVTTEnhancementSuite {
 }
 
 CONFIG.FVTTEnhancementSuite = {
+    settings: {
+        dnd5e: "dnd5e"
+    },
     actorDataReplacements: {
         'skills.acr.mod': 'acrobatics',
         'skills.ani.mod': 'animal-handling',
