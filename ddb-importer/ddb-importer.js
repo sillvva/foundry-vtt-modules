@@ -1423,7 +1423,7 @@ class BeyondImporter extends Application {
     }
 
     get _proxyURL() {
-        return 'https://cors-anywhere.herokuapp.com/';
+        return 'https://cores-fvtt.herokuapp.com/';
     }
 }
 
