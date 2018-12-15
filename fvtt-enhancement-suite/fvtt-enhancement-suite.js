@@ -1,16 +1,18 @@
 /**
  * Foundry VTT Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.1
+ * @version 0.2.2
  */
 
-class FVTTEnhancementSuite extends Application {
+class FVTTEnhancementSuite {
 
-    constructor(app) {
-        super(app);
+    constructor() {
+        this.actors = [];
 
+        // Register hooks
         this.hookReady();
         this.hookActor5eSheet();
+        this.hookActor();
         this.hookChat();
     }
 
@@ -19,6 +21,7 @@ class FVTTEnhancementSuite extends Application {
      */
     hookReady() {
         this.macros = [];
+        this.actorTabs = new Tabs();
         Hooks.on('ready', () => {
             game.settings.register(game.data.system.name, "macros", {
                 name: "Macros",
@@ -42,9 +45,17 @@ class FVTTEnhancementSuite extends Application {
 
             this.optMemory = JSON.parse(game.settings.get(game.data.system.name, 'promptOptionsMemory'));
             this.macros = JSON.parse(game.settings.get(game.data.system.name, "macros"));
-            if(!this.update015to020()) { // Handle update from 0.1.5 to 0.2.0
-                this.renderMacroBar();
-            }
+            // Handle update from 0.1.5 to 0.2.0
+            if(!this.update015to020()) { this.renderMacroBar(); }
+
+            // Used to determine actor permissions when actor is deleted.
+            // If actor is not owned, stored macros will be removed.
+            this.actors = duplicate(game.actors.source);
+
+            // Ensure existing macros actor ids match up with current worlds's actors with same name
+            this.assignMacros();
+
+            this.hookCanvasEvents();
         });
     }
 
@@ -83,6 +94,7 @@ class FVTTEnhancementSuite extends Application {
                             const reader = new FileReader();
                             reader.onload = (e) => {
                                 this.importActor(app.actor, JSON.parse(e.target.result));
+                                toolbar.find('.file-import').remove();
                             };
                             reader.readAsText(file);
                         }
@@ -95,12 +107,73 @@ class FVTTEnhancementSuite extends Application {
     }
 
     /**
+     * Hook into the render call for the Actor
+     */
+    hookActor() {
+        Hooks.on('createActor', actor => {
+            this.actors = duplicate(game.actors.source);
+        });
+
+        Hooks.on('updateActor', actor => {
+            this.actors = duplicate(game.actors.source);
+            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros
+                .map(macro => {
+                    if (macro.actor.id === actor.data._id) {
+                        macro.actor.name = actor.data.name;
+                    }
+                    return macro;
+                }))
+            );
+        });
+
+        Hooks.on('deleteActor', id => {
+            this.actors.filter(a => a._id === id).forEach(a => {
+                if (!Object.entries(a.permission).find(kv => kv[1] === 3)) {
+                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros.filter(m => m.actor.id !== id)));
+                }
+            });
+            this.actors = duplicate(game.actors.source);
+        });
+    }
+
+    /**
      * Hook into the render call for the ChatLog
      */
     hookChat() {
         Hooks.on('renderChatLog', (log, html, data) => {
             this.chatListeners(html);
         });
+    }
+
+    /**
+     * Hook into the canvas events
+     */
+    hookCanvasEvents() {
+        canvas.stage.on('mouseup', (ev) => {
+            if (!(ev.target instanceof Token)) return;
+            const controlledTokens = canvas.tokens.tokens.filter(t => t._controlled);
+            if (controlledTokens.length === 1) {
+                this.actorTabs.activateTab($(`.macro-bar .item[data-tab="${controlledTokens[0].data.actorId}"]`));
+            }
+        });
+    }
+
+    /**
+     * Ensure existing macros actor ids match up with current worlds's actors with same name
+     */
+    assignMacros() {
+        game.settings.set(game.data.system.name, 'macros', JSON.stringify(
+            this.macros.map(macro => {
+                game.actors.source
+                    .filter(a => a.data.name === macro.actor.name && a._id !== macro.actor.id)
+                    .forEach(a => {
+                        if (game.user.isGM || Object.keys(a.permission).find(p => p[0] === game.user.data._id && p[1] === 3)) {
+                            macro.actor.id = a._id;
+                        }
+                    });
+                return macro;
+            })
+        ));
     }
 
     /**
@@ -312,7 +385,6 @@ class FVTTEnhancementSuite extends Application {
                                 });
                             }
 
-                            console.log(macros);
                             game.settings.set("dnd5e", "macros", JSON.stringify(macros));
                         }
                     },
@@ -333,7 +405,7 @@ class FVTTEnhancementSuite extends Application {
                     this.addCustomMacroEventListeners(dialog);
                 });
 
-                const tabs = new Tabs(dialog.element.find('.sheet-tabs'));
+                const tabs = new Tabs(dialog.element.find('.sheet-tabs'), dialog.element.find('.item').get(0).dataset.tab);
 
                 dialog.element.find('.weapon *, .spell *, .tool *').off('click').on('click', (ev) => {
                     let el = $(ev.target).closest('.item').find('.enable').get(0);
@@ -366,7 +438,6 @@ class FVTTEnhancementSuite extends Application {
      * Render the 5e macro bar
      */
     renderMacroBar() {
-        $('body .macro-bar').remove();
         if (this.macros.length > 0) {
             // Get the macros sorted into actors
             let macroActors = [];
@@ -386,10 +457,11 @@ class FVTTEnhancementSuite extends Application {
                 macroActors: macroActors,
                 macroActorsExist: macroActors.length > 0
             }).then(html => {
+                $('body .macro-bar').remove();
                 const body = $(html);
                 $('body').append(body);
                 if(macroActors.length > 0) {
-                    let tabs = new Tabs(body.find('nav.tabs'), macroActors[0].id);
+                    this.actorTabs = new Tabs(body.find('nav.tabs'), macroActors[0].id);
                 }
 
                 $('.macro-bar [data-macro-id]').click((ev) => {
@@ -398,7 +470,7 @@ class FVTTEnhancementSuite extends Application {
 
                     if (macro.type === 'custom') {
                         if (!macro.content) return;
-                        this.parseMessageContent(macro.content).then(message => {
+                        this.parseMessageContent(macro.content, macro.actor).then(message => {
                             this.createMessage(message);
                         });
                     }
@@ -425,7 +497,7 @@ class FVTTEnhancementSuite extends Application {
                             if (macro.subtype === 'prompt') {
                                 const dialog = new Dialog({
                                     title: "Saving Throw",
-                                    content: this._saves5ePromptHtml
+                                    content: this._saves5ePromptTemplate
                                 }).render(true);
 
                                 setTimeout(() => {
@@ -446,7 +518,7 @@ class FVTTEnhancementSuite extends Application {
                             if (macro.subtype === 'prompt') {
                                 const dialog = new Dialog({
                                     title: "Ability Checks",
-                                    content: this._abilities5ePromptHtml
+                                    content: this._abilities5ePromptTemplate
                                 }, { width: 600 }).render(true);
 
                                 setTimeout(() => {
@@ -487,14 +559,14 @@ class FVTTEnhancementSuite extends Application {
      * @param {String} content
      * @returns {Promise<any>}
      */
-    parseMessageContent(content) {
+    parseMessageContent(content, actor) {
         return new Promise((resolve, reject) => {
             this.parsePrompts(duplicate(content)).then((parsed) => {
-                let message = parsed.message;
-                const references = parsed.references;
-                message = this.parsePromptOptionReferences(message, references);
-                if (game.data.system.name === 'dnd5e') {
-                    message = this.parseActor5eData(message, game.actors.entities.find(actor => actor.data.name === macro.actor.name));
+                let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
+                if (actor) {
+                    if (game.data.system.name === 'dnd5e') {
+                        message = this.parseActor5eData(message, actor.name ? game.actors.entities.find(a => a.data.name === actor.name) : actor);
+                    }
                 }
                 const parser = new InlineDiceParser(message);
                 message = parser.parse();
@@ -509,27 +581,39 @@ class FVTTEnhancementSuite extends Application {
      * @param message
      */
     createMessage(message) {
-        const data = {
+        // Set up chat data
+        const chatData = {
             user: game.user._id
         };
+
+        // Parse the message to determine the matching handler
         let [chatType, rgx] = ChatLog.parse(message);
-        if (data.content = rgx ? rgx[2] : message, "roll" === chatType) {
-            let actorData = Roll._getActorData();
-            return new Roll(rgx[2], actorData).toMessage()
-        }
-        if (["ic", "emote"].includes(chatType)) {
-            let charName;
-            if (game.user.character) charName = game.user.character.name;
-            else if (game.user.isGM && canvas.ready) {
-                let token = canvas.tokens.controlledTokens.find(t => void 0 !== t.actor);
-                token && (charName = token.actor.name)
-            }
-            if (!charName) return;
-            data.alias = charName;
-            "emote" === chatType && (data.content = `${charName} ${data.content}`)
+        let [type, match] = ChatLog.parse(message);
+        if ( match) chatData['content'] = match[2];
+        else chatData['content'] = message;
+
+        // Handle dice rolls
+        let roll;
+        if ( type === "roll" ) {
+            let data = Roll._getActorData();
+            chatData['roll'] = new Roll(match[2], data);
         }
 
-        ChatMessage.create(data, !0);
+        // In-Character or Emote
+        else if ( ["ic", "emote"].includes(type) ) {
+            let alias;
+            if ( game.user.character ) alias = game.user.character.name;
+            else if ( game.user.isGM && canvas.ready ) {
+                let token = canvas.tokens.controlledTokens.find(t => t.actor !== undefined);
+                if ( token ) alias = token.actor.name;
+            }
+            if ( !alias ) return;
+            chatData['alias'] = alias;
+            if ( type === "emote" ) chatData["content"] = `${alias} ${chatData['content']}`;
+        }
+
+        if ( chatData["roll"] ) chatData["roll"].toMessage();
+        else ChatMessage.create(chatData, true);
     }
 
     /**
@@ -1068,7 +1152,7 @@ class FVTTEnhancementSuite extends Application {
      * Custom saving throw prompt
      * @returns {string}
      */
-    get _saves5ePromptHtml() {
+    get _saves5ePromptTemplate() {
         return `<div class="saves-prompt">
             <button class="str">Strength</button>
             <button class="dex">Dexterity</button>
@@ -1083,7 +1167,7 @@ class FVTTEnhancementSuite extends Application {
      * Custom ability check prompt
      * @returns {string}
      */
-    get _abilities5ePromptHtml() {
+    get _abilities5ePromptTemplate() {
         return `<div class="abilities-prompt">
             <button class="str">Strength</button>
             <button class="dex">Dexterity</button>
@@ -1281,4 +1365,3 @@ CONFIG.FVTTEnhancementSuite = {
 };
 
 let enhancementSuite = new FVTTEnhancementSuite();
-enhancementSuite.render();
