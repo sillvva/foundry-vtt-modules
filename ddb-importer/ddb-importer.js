@@ -62,8 +62,8 @@ class BeyondImporter extends Application {
         Hooks.on('toolbar5eReady', (html, actor) => {
             const importButton = $('<button class="btn btn-small btn-dark import-dndbeyond-sheet" style="min-width: 96%;"><span class="fas fa-file-import"></span> D&D Beyond<br>Character Import</button>');
 
-            $('.import-dndbeyond-sheet').remove();
-            html.find('.btn-import-data').after(importButton);
+            html.parent().parent().find('.import-dndbeyond-sheet').remove();
+            html.find('.btn-import-data').after(importButton.clone());
 
             // Handle button clicks
             importButton.click(ev => {
