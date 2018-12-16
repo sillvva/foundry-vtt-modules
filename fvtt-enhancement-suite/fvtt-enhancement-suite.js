@@ -1,13 +1,15 @@
 /**
- * Foundry VTT Enhancement Suite
+ * Enhancement Suite
  * @author Matt DeKok <Sillvva>
  * @version 0.2.3
  */
 
-class FVTTEnhancementSuite {
+class EnhancementSuite {
 
     constructor() {
         this.actors = [];
+        this.macros = [];
+        this.actorTabs = new Tabs();
 
         // Register hooks
         this.hookReady();
@@ -20,8 +22,6 @@ class FVTTEnhancementSuite {
      * Hook into the ready call for the VTT application
      */
     hookReady() {
-        this.macros = [];
-        this.actorTabs = new Tabs();
         Hooks.on('ready', () => {
             game.settings.register(game.data.system.name, "macros", {
                 name: "Macros",
@@ -45,8 +45,9 @@ class FVTTEnhancementSuite {
 
             this.optMemory = JSON.parse(game.settings.get(game.data.system.name, 'promptOptionsMemory'));
             this.macros = JSON.parse(game.settings.get(game.data.system.name, "macros"));
+
             // Handle update from 0.1.5 to 0.2.0
-            if(!this.update015to020()) { this.renderMacroBar(); }
+            if(!this._update015to020()) { this.renderMacroBar(); }
 
             // Used to determine actor permissions when actor is deleted.
             // If actor is not owned, stored macros will be removed.
@@ -144,31 +145,25 @@ class FVTTEnhancementSuite {
      */
     hookChat() {
         Hooks.on('renderChatLog', (log, html, data) => {
-            this.chatListeners(html);
+            this.chatListeners(log, html, data);
         });
         Hooks.on('chatMessage', (chatLog, chatData) => {
             const hasMacro = chatData.content.match(/{{.+}}|\[\[.+\]\]|<<.+>>|\?{.+}|@{.+}/);
             if (hasMacro) {
                 const hasRoll = chatData.roll;
-                if (hasRoll) delete chatData.roll;
-                setTimeout(() => {
-                    const cTokens = canvas.tokens.controlledTokens;
-                    if (cTokens.length === 1) {
-                        var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
+                const cTokens = canvas.tokens.controlledTokens;
+                if (cTokens.length === 1) {
+                    var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
+                }
+                this.parseMessageContent(chatData.content, actor, !hasRoll).then(content => {
+                    if (hasRoll) {
+                        const data = Roll._getActorData();
+                        const roll = new Roll(content, data);
+                        roll.toMessage();
+                    } else {
+                        ChatMessage.create({ user: game.user._id, content: content }, true);
                     }
-                    this.parseMessageContent(chatData.content, actor, !hasRoll).then(content => {
-                        const message = game.messages.entities.pop();
-                        $(`.message[data-message-id="${message.data._id}"]`).remove();
-                        message.delete(true);
-                        if (hasRoll) {
-                            const data = Roll._getActorData();
-                            const roll = new Roll(content, data);
-                            roll.toMessage();
-                        } else {
-                            ChatMessage.create({ user: game.user._id, content: content }, true);
-                        }
-                    });
-                }, 50);
+                });
                 return false;
             }
         });
@@ -180,9 +175,8 @@ class FVTTEnhancementSuite {
     hookCanvasEvents() {
         canvas.stage.on('mouseup', (ev) => {
             if (!(ev.target instanceof Token)) return;
-            const controlledTokens = canvas.tokens.tokens.filter(t => t._controlled);
-            if (controlledTokens.length === 1) {
-                this.actorTabs.activateTab($(`.macro-bar .item[data-tab="${controlledTokens[0].data.actorId}"]`));
+            if (canvas.tokens.controlledTokens.length === 1) {
+                this.actorTabs.activateTab($(`.macro-bar .item[data-tab="${canvas.tokens.controlledTokens[0].data.actorId}"]`));
             }
         });
     }
@@ -190,19 +184,21 @@ class FVTTEnhancementSuite {
     /**
      * Ensure existing macros actor ids match up with current worlds's actors with same name
      */
-    assignMacros() {
-        game.settings.set(game.data.system.name, 'macros', JSON.stringify(
-            this.macros.map(macro => {
-                game.actors.source
-                    .filter(a => a.data.name === macro.actor.name && a._id !== macro.actor.id)
-                    .forEach(a => {
-                        if (game.user.isGM || Object.keys(a.permission).find(p => p[0] === game.user.data._id && p[1] === 3)) {
-                            macro.actor.id = a._id;
-                        }
-                    });
-                return macro;
-            })
-        ));
+    assignMacros(store = true) {
+        this.macros = this.macros.map((macro, mid) => {
+            game.actors.source
+                .filter(a => a.name === macro.actor.name && a._id !== macro.actor.id)
+                .forEach(a => {
+                    if (game.user.isGM || Object.keys(a.permission).find(p => p[0] === game.user.data._id && p[1] === 3)) {
+                        macro.actor.id = a._id;
+                    }
+                });
+            macro.mid = mid;
+            return macro;
+        });
+        if (store) {
+            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros));
+        }
     }
 
     /**
@@ -233,6 +229,8 @@ class FVTTEnhancementSuite {
         if (!this.macros) return;
         const macros = this.macros.filter(macro => actor.data.name === macro.actor.name);
         const items = duplicate(actor.data.items);
+
+        // generic (base) macro configuration
         const data = {
             actor: actor,
             system: game.data.system.name,
@@ -248,12 +246,7 @@ class FVTTEnhancementSuite {
                 weapons: items.filter(item => item.type === 'weapon')
                     .map(item => {
                         item.enabled = macros.find(macro => macro.type === 'weapon' && parseInt(macro.iid) === item.id) != null;
-
-                        let toHit = !isNaN(item.data.bonus.value) ? parseInt(item.data.bonus.value || 0) : 0;
-                        toHit += item.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
-                        toHit += Math.floor((parseInt(actor.data.data.abilities[item.data.ability.value].value) - 10) / 2);
-                        item.data.hit = toHit;
-
+                        item.data.hit = '';
                         item.data.damage.value = item.data.damage.value.replace('+0','');
                         return item;
                     }),
@@ -268,7 +261,7 @@ class FVTTEnhancementSuite {
                     })
                     .map(item => {
                         item.enabled = macros.find(macro => macro.type === 'spell' && parseInt(macro.iid) === item.id) != null;
-                        item.school = CONFIG.FVTTEnhancementSuite.spellSchools[item.data.school.value] || item.data.school.value;
+                        item.school = '';
                         return item;
                     }),
                 tools: items.filter(item => item.type === 'tool')
@@ -279,7 +272,9 @@ class FVTTEnhancementSuite {
                 custom: macros.filter(macro => macro.type === 'custom')
             }
         };
-        if (game.data.system.name === CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
+
+        // macro configuration for dnd5e
+        if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
             data.hasMacros.abilities5e = true;
             data.macros.abilities = {
                 prompt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false,
@@ -319,8 +314,21 @@ class FVTTEnhancementSuite {
                     wis: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') || false,
                     cha: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') || false
             };
+
+            data.macros.weapons = data.macros.weapons.map(item => {
+                let toHit = !isNaN(item.data.bonus.value) ? parseInt(item.data.bonus.value || 0) : 0;
+                toHit += item.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
+                toHit += Math.floor((parseInt(actor.data.data.abilities[item.data.ability.value].value) - 10) / 2);
+                item.data.hit = toHit;
+                return item;
+            });
+
+            data.macros.spells = data.macros.spells.map(item => {
+                item.school = CONFIG.EnhancementSuite.spellSchools[item.data.school.value] || item.data.school.value;
+                return item;
+            });
         }
-        renderTemplate(this._templatePath+'/macros/macro-configuration.html', data).then(html => {
+        renderTemplate(this.constructor._templatePath+'/macros/macro-configuration.html', data).then(html => {
             const dialog = new Dialog({
                 title: "Macro Configuration",
                 content: html,
@@ -448,7 +456,7 @@ class FVTTEnhancementSuite {
             setTimeout(() => {
                 dialog.element.find('.new-custom-macro').off('click').on('click', (ev) => {
                     ev.preventDefault();
-                    dialog.element.find('.tab[data-tab="custom"] .macros').append(this._macroItemTemplate);
+                    dialog.element.find('.tab[data-tab="custom"] .macros').append(this.constructor._macroItemTemplate);
                     this.addCustomMacroEventListeners(dialog);
                 });
 
@@ -485,120 +493,124 @@ class FVTTEnhancementSuite {
      * Render the 5e macro bar
      */
     renderMacroBar() {
-        if (this.macros.length > 0) {
-            // Get the macros sorted into actors
-            let macroActors = [];
-            this.macros.forEach(macro => {
-                let m = duplicate(macro);
-                if (!game.actors.entities.find(a => a.data.name === m.actor.name)) return;
-                let mai = macroActors.findIndex(ma => ma.name === m.actor.name);
-                if (mai < 0) {
-                    mai = macroActors.length;
-                    macroActors.push(Object.assign(m.actor, {macros: []}));
-                }
-                macroActors[mai].macros.push(m);
-            });
-            macroActors = macroActors.sort((a, b) => a.name > b.name ? 1 : -1);
-            // Render the macro bar template
-            renderTemplate(this._templatePath+'/macros/macro-bar.html', {
-                macroActors: macroActors,
-                macroActorsExist: macroActors.length > 0
-            }).then(html => {
-                $('body .macro-bar').remove();
-                const body = $(html);
-                $('body').append(body);
-                if(macroActors.length > 0) {
-                    this.actorTabs = new Tabs(body.find('nav.tabs'), macroActors[0].id);
+        if(this.macros.length === 0) return;
+
+        // Ensure existing macros actor ids match up with current worlds's actors with same name
+        this.assignMacros(false);
+
+        // Get the macros sorted into actors
+        let macroActors = [];
+        this.macros.forEach(macro => {
+            let m = duplicate(macro);
+            if (!game.actors.entities.find(a => a.data.name === m.actor.name)) return;
+            let mai = macroActors.findIndex(ma => ma.name === m.actor.name);
+            if (mai < 0) {
+                mai = macroActors.length;
+                macroActors.push(Object.assign(m.actor, {macros: []}));
+            }
+            macroActors[mai].macros.push(m);
+        });
+        macroActors = macroActors.sort((a, b) => a.name > b.name ? 1 : -1);
+
+        // Render the macro bar template
+        renderTemplate(this.constructor._templatePath+'/macros/macro-bar.html', {
+            macroActors: macroActors,
+            macroActorsExist: macroActors.length > 0
+        }).then(html => {
+            $('body .macro-bar').remove();
+            const body = $(html);
+            $('body').append(body);
+            if(macroActors.length > 0) {
+                this.actorTabs = new Tabs(body.find('nav.tabs'), macroActors[0].id);
+            }
+
+            $('.macro-bar [data-macro-id]').click((ev) => {
+                const macroId = parseInt($(ev.target).attr('data-macro-id'));
+                const macro = this.macros.find(m => m.mid === macroId);
+
+                if (macro.type === 'custom') {
+                    if (!macro.content) return;
+                    this.parseMessageContent(macro.content, macro.actor).then(message => {
+                        this.createMessage(message);
+                    });
                 }
 
-                $('.macro-bar [data-macro-id]').click((ev) => {
-                    const macroId = parseInt($(ev.target).attr('data-macro-id'));
-                    const macro = this.macros.find(m => m.mid === macroId);
-
-                    if (macro.type === 'custom') {
-                        if (!macro.content) return;
-                        this.parseMessageContent(macro.content, macro.actor).then(message => {
-                            this.createMessage(message);
-                        });
+                if (game.data.system.name == CONFIG.EnhancementSuite.settings.dnd5e) {
+                    if (macro.type === 'weapon' || macro.type === 'spell') {
+                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
+                        let itemId = Number(macro.iid),
+                            Item = CONFIG.Item.entityClass,
+                            item = new Item(actor.items.find(i => i.id === itemId), actor);
+                        item.roll();
                     }
 
-                    if (game.data.system.name == CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
-                        if (macro.type === 'weapon' || macro.type === 'spell') {
-                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
-                            let itemId = Number(macro.iid),
-                                Item = CONFIG.Item.entityClass,
-                                item = new Item(actor.items.find(i => i.id === itemId), actor);
-                            item.roll();
-                        }
+                    if (macro.type === 'tool') {
+                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
+                        let itemId = Number(macro.iid),
+                            Item = CONFIG.Item.entityClass,
+                            item = new Item(actor.items.find(i => i.id === itemId), actor);
+                        item.roll();
+                    }
 
-                        if (macro.type === 'tool') {
-                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
-                            let itemId = Number(macro.iid),
-                                Item = CONFIG.Item.entityClass,
-                                item = new Item(actor.items.find(i => i.id === itemId), actor);
-                            item.roll();
-                        }
+                    if (macro.type === 'saving-throw') {
+                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
+                        if (macro.subtype === 'prompt') {
+                            const dialog = new Dialog({
+                                title: "Saving Throw",
+                                content: this.constructor._saves5ePromptTemplate
+                            }).render(true);
 
-                        if (macro.type === 'saving-throw') {
-                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
-                            if (macro.subtype === 'prompt') {
-                                const dialog = new Dialog({
-                                    title: "Saving Throw",
-                                    content: this._saves5ePromptTemplate
-                                }).render(true);
-
-                                setTimeout(() => {
-                                    ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
-                                        dialog.element.find('.'+abl).off('click').on('click', () => {
-                                            dialog.close();
-                                            actor.rollAbilitySave(abl);
-                                        });
+                            setTimeout(() => {
+                                ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
+                                    dialog.element.find('.'+abl).off('click').on('click', () => {
+                                        dialog.close();
+                                        actor.rollAbilitySave(abl);
                                     });
-                                }, 10);
-                            } else {
+                                });
+                            }, 10);
+                        } else {
+                            actor.rollAbilitySave(macro.subtype);
+                        }
+                    }
+
+                    if (macro.type === 'ability-check') {
+                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
+                        if (macro.subtype === 'prompt') {
+                            const dialog = new Dialog({
+                                title: "Ability Checks",
+                                content: this.constructor._abilities5ePromptTemplate
+                            }, { width: 600 }).render(true);
+
+                            setTimeout(() => {
+                                ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
+                                    dialog.element.find('.'+abl).off('click').on('click', () => {
+                                        dialog.close();
+                                        actor.rollAbilityTest(abl);
+                                    });
+                                });
+                                ['acr', 'ani', 'arc', 'ath', 'dec', 'his',
+                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
+                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].forEach((skl) => {
+                                    dialog.element.find('.'+skl).off('click').on('click', () => {
+                                        dialog.close();
+                                        actor.rollSkill(skl);
+                                    });
+                                });
+                            }, 10);
+                        } else {
+                            if (['str', 'dex', 'con', 'int', 'wis', 'cha'].indexOf(macro.subtype) >= 0) {
                                 actor.rollAbilitySave(macro.subtype);
                             }
-                        }
-
-                        if (macro.type === 'ability-check') {
-                            let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
-                            if (macro.subtype === 'prompt') {
-                                const dialog = new Dialog({
-                                    title: "Ability Checks",
-                                    content: this._abilities5ePromptTemplate
-                                }, { width: 600 }).render(true);
-
-                                setTimeout(() => {
-                                    ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
-                                        dialog.element.find('.'+abl).off('click').on('click', () => {
-                                            dialog.close();
-                                            actor.rollAbilityTest(abl);
-                                        });
-                                    });
-                                    ['acr', 'ani', 'arc', 'ath', 'dec', 'his',
-                                        'ins', 'itm', 'inv', 'med', 'nat', 'prc',
-                                        'prf', 'per', 'rel', 'slt', 'ste', 'sur'].forEach((skl) => {
-                                        dialog.element.find('.'+skl).off('click').on('click', () => {
-                                            dialog.close();
-                                            actor.rollSkill(skl);
-                                        });
-                                    });
-                                }, 10);
-                            } else {
-                                if (['str', 'dex', 'con', 'int', 'wis', 'cha'].indexOf(macro.subtype) >= 0) {
-                                    actor.rollAbilitySave(macro.subtype);
-                                }
-                                if (['acr', 'ani', 'arc', 'ath', 'dec', 'his',
-                                        'ins', 'itm', 'inv', 'med', 'nat', 'prc',
-                                        'prf', 'per', 'rel', 'slt', 'ste', 'sur'].indexOf(macro.subtype) >= 0) {
-                                    actor.rollSkill(macro.subtype);
-                                }
+                            if (['acr', 'ani', 'arc', 'ath', 'dec', 'his',
+                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
+                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].indexOf(macro.subtype) >= 0) {
+                                actor.rollSkill(macro.subtype);
                             }
                         }
                     }
-                })
-            });
-        }
+                }
+            })
+        });
     }
 
     /**
@@ -613,7 +625,7 @@ class FVTTEnhancementSuite {
             this.parsePrompts(duplicate(content)).then((parsed) => {
                 let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
                 if (actor) {
-                    if (game.data.system.name === CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
+                    if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
                         message = this.parseActor5eData(message, actor.name ? game.actors.entities.find(a => a.data.name === actor.name) : actor);
                     }
                 }
@@ -703,7 +715,7 @@ class FVTTEnhancementSuite {
         let roll = $(event.currentTarget).parents('.damage-card'),
             value = Math.floor(this.getTotalDamage(roll) * multiplier);
 
-        this.applyDamageAmount(value);
+        this.constructor.applyDamageAmount(value);
     }
 
     /**
@@ -744,7 +756,7 @@ class FVTTEnhancementSuite {
                     icon: '',
                     label: 'Normal',
                     callback: () => {
-                        this.applyDamageAmount(dmg.amount);
+                        this.constructor.applyDamageAmount(dmg.amount);
                         if (types.length > 0) this.promptDamageTypes(types);
                     }
                 },
@@ -752,7 +764,7 @@ class FVTTEnhancementSuite {
                     icon: '',
                     label: 'Immune',
                     callback: () => {
-                        this.applyDamageAmount(0);
+                        this.constructor.applyDamageAmount(0);
                         if (types.length > 0) this.promptDamageTypes(types);
                     }
                 },
@@ -760,7 +772,7 @@ class FVTTEnhancementSuite {
                     icon: '',
                     label: 'Resistant',
                     callback: () => {
-                        this.applyDamageAmount(Math.floor(dmg.amount * 0.5));
+                        this.constructor.applyDamageAmount(Math.floor(dmg.amount * 0.5));
                         if (types.length > 0) this.promptDamageTypes(types);
                     }
                 },
@@ -768,7 +780,7 @@ class FVTTEnhancementSuite {
                     icon: '',
                     label: 'Vulnerable',
                     callback: () => {
-                        this.applyDamageAmount(dmg.amount * 2);
+                        this.constructor.applyDamageAmount(dmg.amount * 2);
                         if (types.length > 0) this.promptDamageTypes(types);
                     }
                 }
@@ -818,7 +830,7 @@ class FVTTEnhancementSuite {
      * Apply damage amount to selected tokens
      * @param value
      */
-    applyDamageAmount(value) {
+    static applyDamageAmount(value) {
         // Get tokens to which damage can be applied
         const tokens = canvas.tokens.controlledTokens.filter(t => {
             if ( t.actor && t.data.actorLink ) return true;
@@ -943,12 +955,14 @@ class FVTTEnhancementSuite {
     parsePromptTags(message, resolve, parsed = {}) {
         const rgx = "\\?{(?!:)(\\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\\|([^\\]]+)?)?\\])?(?<query>[^\\|}]+)\\|?(?<list>(([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}"
         const p = message.match(new RegExp(rgx, 'i'));
-        if(!this.optMemory[rgx]) this.optMemory[rgx] = {};
         if (!p) {
             game.settings.set(game.data.system.name, 'promptOptionsMemory', JSON.stringify(this.optMemory));
             resolve({message: message, references: parsed});
         } else {
             const tag = p[0];
+
+            if(!this.optMemory[tag]) this.optMemory[tag] = {};
+
             const listType = p.groups.listType || 'list';
             const query = p.groups.query.trim();
             const list = p.groups.list;
@@ -965,8 +979,7 @@ class FVTTEnhancementSuite {
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
                         const liLabel = parts[0].trim();
-                        const selected = this.optMemory[rgx][query] === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
-                        console.log(liLabel, this.optMemory[rgx][query], parts.slice(1).join(',').trim().replace(/"/g, '\\"'));
+                        const selected = this.optMemory[tag].value === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
                         html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(selected ? 'selected': '')+'>'+parts[0].trim()+'</option>';
                     });
                     html += '</select></p>';
@@ -977,8 +990,7 @@ class FVTTEnhancementSuite {
                     list.split('|').forEach((listItem) => {
                         const parts = listItem.split(',');
                         const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
-                        const checked = this.optMemory[rgx][liLabel] === parts.slice(1).join(',');
-                        if(listType === 'checkbox') delete this.optMemory[rgx][liLabel];
+                        const checked = this.optMemory[tag][liLabel] === parts.slice(1).join(',');
                         html += '<p><label><input type="'+listType+'" name="'+liLabel+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(checked ? 'checked': '')+' /> '+parts[0].trim()+'</label></p>'
                     });
                     html += '</form>';
@@ -999,16 +1011,21 @@ class FVTTEnhancementSuite {
                                     if (listType === 'list') {
                                         const inputLabel = $(inputTag+' option:selected').html();
                                         const inputValue = $(inputTag+' option:selected').val();
-                                        this.optMemory[rgx][query] = inputValue;
+                                        this.optMemory[tag].value = inputValue;
                                         parsed[inputLabel] = inputValue.split(',');
                                         parsed[query] = [inputValue.split(',')[0]];
                                         this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
                                     } else if (listType === 'checkbox' || listType === 'radio') {
                                         const selected = [];
+                                        list.split('|').forEach((listItem) => {
+                                            const parts = listItem.split(',');
+                                            const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
+                                            if(listType === 'checkbox') delete this.optMemory[tag][liLabel];
+                                        });
                                         $(inputTag).serializeArray().forEach(item => {
                                             selected.push(item.value.split(',')[0]);
                                             parsed[item.name] = item.value.split(',');
-                                            this.optMemory[rgx][item.name] = item.value;
+                                            this.optMemory[tag][item.name] = item.value;
                                         });
                                         const input = selected.join(optionDelimiter);
                                         parsed[query] = [input];
@@ -1094,14 +1111,14 @@ class FVTTEnhancementSuite {
         actorInfo.push({ name: 'name', value: actor.data.name });
         actorInfo = actorInfo.map(field => {
             field.name = field.name.replace(/data\.((details|attributes|resources|spells|traits|abilities)\.)?|\.value/gi, '');
-            if (CONFIG.FVTTEnhancementSuite.actorDataReplacements[field.name]) {
-                field.name = CONFIG.FVTTEnhancementSuite.actorDataReplacements[field.name];
+            if (CONFIG.EnhancementSuite.actorDataReplacements[field.name]) {
+                field.name = CONFIG.EnhancementSuite.actorDataReplacements[field.name];
             }
             return field;
         }).filter(field => {
             return ['biography', 'speed'].indexOf(field.name) < 0 && field.name.indexOf('skills.') < 0;
         });
-        if (game.data.system.name === CONFIG.FVTTEnhancementSuite.settings.dnd5e) {
+        if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
             actor.data.items.filter(item => item.type === 'class').forEach((item, i) => {
                 actorInfo.push({ name: 'class'+(i+1), value: item.name });
                 actorInfo.push({ name: 'class'+(i+1)+'.subclass', value: item.data.subclass.value });
@@ -1171,7 +1188,7 @@ class FVTTEnhancementSuite {
     /**
      * Getter for the module templates path
      */
-    get _templatePath() {
+    static get _templatePath() {
         return 'public/modules/fvtt-enhancement-suite/templates';
     }
 
@@ -1179,7 +1196,7 @@ class FVTTEnhancementSuite {
      * Custom macro item template
      * @returns {string}
      */
-    get _macroItemTemplate() {
+    static get _macroItemTemplate() {
         return `<div class="macro">
             <div class="macro-list">
                 <div class="macro-list-name">
@@ -1203,7 +1220,7 @@ class FVTTEnhancementSuite {
      * Custom saving throw prompt
      * @returns {string}
      */
-    get _saves5ePromptTemplate() {
+    static get _saves5ePromptTemplate() {
         return `<div class="saves-prompt">
             <button class="str">Strength</button>
             <button class="dex">Dexterity</button>
@@ -1218,7 +1235,7 @@ class FVTTEnhancementSuite {
      * Custom ability check prompt
      * @returns {string}
      */
-    get _abilities5ePromptTemplate() {
+    static get _abilities5ePromptTemplate() {
         return `<div class="abilities-prompt">
             <button class="str">Strength</button>
             <button class="dex">Dexterity</button>
@@ -1360,7 +1377,7 @@ class FVTTEnhancementSuite {
     /**
      * Data structure update for version 0.1.5 to version 0.2.0
      */
-    update015to020() {
+    _update015to020() {
         let updated = false;
         this.macros = this.macros.map(macro => {
             if (typeof macro.actor === 'string') {
@@ -1379,7 +1396,7 @@ class FVTTEnhancementSuite {
     }
 }
 
-CONFIG.FVTTEnhancementSuite = {
+CONFIG.EnhancementSuite = {
     settings: {
         dnd5e: "dnd5e"
     },
@@ -1419,4 +1436,4 @@ CONFIG.FVTTEnhancementSuite = {
     }
 };
 
-let enhancementSuite = new FVTTEnhancementSuite();
+let enhancementSuite = new EnhancementSuite();

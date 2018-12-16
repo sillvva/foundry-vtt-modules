@@ -2,7 +2,7 @@
 
 ## Compatibility
 
-Requires FVTT version 0.0.9 or higher.
+Requires FVTT version 0.1.0 or higher.
 
 ## Documentation:
 
