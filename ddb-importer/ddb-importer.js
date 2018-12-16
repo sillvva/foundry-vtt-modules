@@ -189,7 +189,7 @@ class BeyondImporter extends Application {
 
         let obj = {};
 
-        obj['img'] = this._proxyURL+character.avatarUrl;
+        obj['img'] = this.constructor._proxyURL+character.avatarUrl;
         obj['name'] = character.name;
 
         // Set Details
@@ -1198,11 +1198,11 @@ class BeyondImporter extends Application {
                     }
 
                     if (item.definition.type === 'Light Armor' && item.equipped && dexMod === 0) {
-                        dexMod = this.getAbilityMod(this.getTotalAbilityScore(character, 2));
+                        dexMod = this.constructor.getAbilityMod(this.getTotalAbilityScore(character, 2));
                     }
 
                     if (item.definition.type === 'Medium Armor' && item.equipped && dexMod === 0) {
-                        dexMod = this.getAbilityMod(this.getTotalAbilityScore(character, 2));
+                        dexMod = this.constructor.getAbilityMod(this.getTotalAbilityScore(character, 2));
                     }
 
                     if (sheetItem.data.equipped.value) {
@@ -1345,7 +1345,7 @@ class BeyondImporter extends Application {
         }
 
         if (unarmored != null && !hasArmor) {
-            dexMod = this.getAbilityMod(this.getTotalAbilityScore(character, 2));
+            dexMod = this.constructor.getAbilityMod(this.getTotalAbilityScore(character, 2));
             ac += 10;
             unarmored.forEach((ua, i) => {
                 if(ua.type != 'set') return;
@@ -1428,7 +1428,7 @@ class BeyondImporter extends Application {
         return total;
     }
 
-    getAbilityMod(score) {
+    static getAbilityMod(score) {
         return Math.floor((score - 10) / 2);
     }
 
@@ -1470,7 +1470,7 @@ class BeyondImporter extends Application {
         });
     }
 
-    get _proxyURL() {
+    static get _proxyURL() {
         return 'https://cores-fvtt.herokuapp.com/';
     }
 }
