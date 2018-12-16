@@ -1,6 +1,6 @@
 /**
  * @author Matt DeKok <Sillvva>
- * @version 0.1.4
+ * @version 0.1.5
  */
 
 class BeyondImporter extends Application {
@@ -63,7 +63,7 @@ class BeyondImporter extends Application {
             const importButton = $('<button class="btn btn-small btn-dark import-dndbeyond-sheet" style="min-width: 96%;"><span class="fas fa-file-import"></span> D&D Beyond<br>Character Import</button>');
 
             $('.import-dndbeyond-sheet').remove();
-            html.find('.btn-macros').after(importButton);
+            html.find('.btn-import-data').after(importButton);
 
             // Handle button clicks
             importButton.click(ev => {
@@ -158,7 +158,10 @@ class BeyondImporter extends Application {
         // Create new actor (GM only) if entity is not pre-defined
         if(opts.actor == null) {
             Actor5e.create({ name: data.character.name, type: 'character' }, true).then(actor => {
-                this.parseCharacterData(actor, data.character);
+                actor.render(true);
+                setTimeout(() => {
+                    this.parseCharacterData(actor, data.character);
+                }, 250);
             });
         } else {
             this.parseCharacterData(opts.actor, data.character);
@@ -181,6 +184,8 @@ class BeyondImporter extends Application {
         let features = this.getFeatures(character);
         let classSpells = features.spells;
         let biography = features.biography;
+
+        items = items.concat(features.features);
 
         let obj = {};
 
@@ -408,7 +413,7 @@ class BeyondImporter extends Application {
             items.push(spellItem);
         });
 
-        actorEntity.update(obj, true);
+        actorEntity.update(obj);
         this.parseItems(actorEntity, items);
     }
 
@@ -624,6 +629,24 @@ class BeyondImporter extends Application {
     getFeatures(character) {
         let biography = '';
         let classSpells = [];
+        const features = [];
+        const featureTemplate = {
+            name: '',
+            type: 'feat',
+            data: {
+                damage: {type: "String", label: "Ability Damage"},
+                damageType: {type: "String", label: "Damage Type"},
+                description: {type: "String", label: "Description"},
+                duration: {type: "String", label: "Duration"},
+                featType: {type: "String", label: "Feat Type"},
+                range: {type: "String", label: "Range"},
+                requirements: {type: "String", label: "Requirements"},
+                save: {type: "String", label: "Saving Throw"},
+                source: {type: "String", label: "Source"},
+                target: {type: "String", label: "Target"},
+                time: {type: "String", label: "Casting Time"}
+            }
+        };
 
         // Background Feature
         if(character.background.definition != null) {
@@ -635,6 +658,7 @@ class BeyondImporter extends Application {
             }
 
             biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+
         }
 
         // Custom Background Feature
@@ -660,7 +684,10 @@ class BeyondImporter extends Application {
                 source_type: feat.definition.name
             };
 
-            biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+            let feature = duplicate(featureTemplate);
+            feature.name = btrait.name;
+            feature.data.description.value = '<h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+            features.push(feature);
         });
 
         // Race Features
@@ -685,10 +712,15 @@ class BeyondImporter extends Application {
                     name: trait.definition.name,
                     description: description,
                     source: 'Race',
-                    source_type: character.race.fullName
+                    source_type: (character.race.subRaceShortName == null || character.race.subRaceShortName === '' ? '' : character.race.subRaceShortName+' ')+character.race.baseName
                 };
 
-                biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                // biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                let feature = duplicate(featureTemplate);
+                feature.name = btrait.name;
+                feature.data.requirements.value = btrait.source+': '+btrait.source_type;
+                feature.data.description.value = '<h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                features.push(feature);
 
                 let spells = this.getFeatureSpells(character, trait.id, 'race');
                 spells.forEach((spell) => {
@@ -765,7 +797,12 @@ class BeyondImporter extends Application {
                     source_type: currentClass.definition.name
                 };
 
-                biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                // biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                let feature = duplicate(featureTemplate);
+                feature.name = btrait.name;
+                feature.data.requirements.value = btrait.source+': '+btrait.source_type+' '+trait.requiredLevel;
+                feature.data.description.value = '<h3><p><small><em>'+btrait.source+': '+btrait.source_type+' '+trait.requiredLevel+'</em></small></p><p>'+btrait.description+'</p>';
+                features.push(feature);
 
                 let spells = this.getFeatureSpells(character, trait.id, 'class');
                 spells.forEach((spell) => {
@@ -794,7 +831,11 @@ class BeyondImporter extends Application {
                                     source_type: currentClass.definition.name
                                 };
 
-                                biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                                // biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                                let feature = duplicate(featureTemplate);
+                                feature.name = btrait.name;
+                                feature.data.description.value = '<h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                                features.push(feature);
                             }
                         }
                     });
@@ -823,10 +864,15 @@ class BeyondImporter extends Application {
                         name: trait.name,
                         description: description,
                         source: 'Class',
-                        source_type: currentClass.definition.name
+                        source_type: currentClass.subclassDefinition.name+' '+currentClass.definition.name
                     };
 
-                    biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                    // biography += '<h3><strong>'+btrait.name+'</strong></h3><p><small><em>'+btrait.source+': '+btrait.source_type+'</em></small></p><p>'+btrait.description+'</p>';
+                    let feature = duplicate(featureTemplate);
+                    feature.name = btrait.name;
+                    feature.data.requirements.value = btrait.source+': '+btrait.source_type+' '+trait.requiredLevel;
+                    feature.data.description.value = '<h3><p><small><em>'+btrait.source+': '+btrait.source_type+' '+trait.requiredLevel+'</em></small></p><p>'+btrait.description+'</p>';
+                    features.push(feature);
 
                     let spells = this.getFeatureSpells(character, trait.id, 'class');
                     spells.forEach((spell) => {
@@ -864,7 +910,8 @@ class BeyondImporter extends Application {
             multiClassLevel: multiClassLevel,
             multiClasses: multiClasses,
             level: totalLevel,
-            monkLevel: monkLevel
+            monkLevel: monkLevel,
+            features: features
         };
     }
 
@@ -1331,20 +1378,21 @@ class BeyondImporter extends Application {
         if(items == null) return;
         if(items.length === 0) return;
 
-        let it = actorEntity.data.items.filter(item => {
-            if(item.type === 'class') return item.name === items[i].name;
-            if(item.type === 'weapon') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'equipment') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'backpack') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'consumable') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'tool') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'spell') return item.data.source.value === items[i].data.source.value;
+        let it = actorEntity.data.items.find(item => {
+            if(item.type === 'feat') return item.type === items[i].type && item.name === items[i].name;
+            if(item.type === 'class') return item.type === items[i].type && item.name === items[i].name;
+            if(item.type === 'weapon') return item.type === items[i].type && item.data.source.value === items[i].data.source.value;
+            if(item.type === 'equipment') return item.type === items[i].type && item.data.source.value === items[i].data.source.value;
+            if(item.type === 'backpack') return item.type === items[i].type && item.data.source.value === items[i].data.source.value;
+            if(item.type === 'consumable') return item.type === items[i].type && item.data.source.value === items[i].data.source.value;
+            if(item.type === 'tool') return item.type === items[i].type && item.data.source.value === items[i].data.source.value;
+            if(item.type === 'spell') return item.type === items[i].type && item.data.source.value === items[i].data.source.value;
             return false;
         });
-        if(it.length > 0) {
-            actorEntity.updateOwnedItem(it, items[i]);
-        }
-        else {
+
+        if(it) {
+            actorEntity.updateOwnedItem(Object.assign(it, items[i]), true);
+        } else {
             actorEntity.createOwnedItem(items[i], true);
         }
 
