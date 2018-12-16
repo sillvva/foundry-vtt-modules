@@ -21,48 +21,103 @@
 }
 
 /**
- * Actor Sheet Toolbar
+ * Resizable Actor Sheet
  */
+.window-app.sheet {
+    display: grid;
+    resize: both;
+    overflow: auto;
+    min-width: 816px;
+    min-height: 600px;
+    grid-template-columns: 160px auto;
+    grid-template-rows: 30px auto;
+    grid-gap: 0;
+}
+.window-app.sheet.toolbar-collapsed {
+    grid-template-columns: 60px auto;
+    min-width: 700px;
+}
+.window-app.sheet .window-header {
+    grid-column-start: 2;
+    grid-column-end: 3;
+}
+.dnd5e.actor-sheet {
+    position: relative;
+}
+.dnd5e.actor-sheet .sheet-body {
+    position: absolute;
+    top: 0;
+    right: 0;
+    left: 250px;
+    bottom: 0;
+}
 .dnd5e.actor-sheet .sheet-body .tab {
     flex: 1 0 !important;
 }
-.sheet-sidebar {
+.dnd5e.actor-sheet .sheet-body .tab.inventory .inventory-list {
+    height: calc(100% - 44px) !important;
+}
+.dnd5e.actor-sheet .sheet-body .tab.spellbook .inventory-list {
+    height: calc(100% - 35px) !important;
+}
+.dnd5e.actor-sheet .sheet-body .tab.feats .inventory-list {
+    height: 100% !important;
+}
+.dnd5e.actor-sheet .sheet-sidebar {
     display: flex;
     flex-direction: column;
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    width: 250px;
 }
-.sheet-sidebar img.sheet-profile {
+.dnd5e.actor-sheet .sheet-sidebar img.sheet-profile {
     flex: 0 1 250px;
+    min-height: 250px;
 }
-.sheet-sidebar nav.sheet-tabs {
+.dnd5e.actor-sheet .sheet-sidebar nav.sheet-tabs {
     margin-top: 5px;
     flex: 0 1 32px;
+    min-height: 32px;
 }
-.sheet-sidebar .tab {
+.dnd5e.actor-sheet .sheet-sidebar .tab {
     flex-grow: 1;
     max-height: 432px;
     overflow-y: auto;
+}
+.dnd5e.actor-sheet .sheet-header .charlevel .experience > input[type="text"] {
+    flex: 1 0;
+}
+.dnd5e.actor-sheet .sheet-header .charlevel .experience > input[type="text"] + span {
+    flex: none !important;
+}
+
+/**
+ * Actor Sheet Toolbar
+ */
+
+.actor-sheet-toolbar {
+    height: 100%;
+    top: 30px;
+    right: 100%;
+    padding: 8px;
+    background: rgba(255,255,255,0.3);
+    border-radius: 0 0 0 5px;
+    overflow-y: auto;
+    grid-row-start: 2;
+    grid-row-end: 3;
 }
 .actor-sheet-toolbar .toolbar-header {
     position: absolute;
     top: 0;
     left: 0;
-    right: 0;
+    width: 160px;
     height: 30px;
-    background: rgba(0,0,0,0.7);
     border-radius: 5px 5px 0 0;
     padding: 5px 8px;
     color: #fff;
     text-shadow: 1px 1px 1px #000;
-}
-.actor-sheet-toolbar {
-    position: absolute;
-    height: 100%;
-    top: 0;
-    right: 100%;
-    padding: 38px 8px 0;
-    background: rgba(255,255,255,0.3);
-    border-radius: 5px 5px 0 5px;
-    overflow-y: auto;
 }
 .actor-sheet-toolbar .btn {
     display: inline-block;
@@ -82,6 +137,21 @@
     line-height: 1.5;
     border-radius: .25rem;
     transition: color .15s ease-in-out,background-color .15s ease-in-out,border-color .15s ease-in-out,box-shadow .15s ease-in-out;
+}
+.actor-sheet-toolbar .btn span {
+    margin-left: 5px;
+}
+.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .fa,
+.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .far,
+.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .fas {
+    margin-right: 16px;
+}
+.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .btn {
+    white-space: nowrap;
+    overflow: hidden;
+}
+.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .btn br {
+    display: none;
 }
 .actor-sheet-toolbar .btn-dark {
     color: #fff;

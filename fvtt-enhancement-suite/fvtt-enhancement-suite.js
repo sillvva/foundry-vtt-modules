@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.3
+ * @version 0.2.4
  */
 
 class EnhancementSuite {
@@ -13,7 +13,9 @@ class EnhancementSuite {
 
         // Register hooks
         this.hookReady();
+        this.hookToolbarReady();
         this.hookActor5eSheet();
+        this.hookActorPFSheet();
         this.hookActor();
         this.hookChat();
     }
@@ -42,9 +44,24 @@ class EnhancementSuite {
                     this.optMemory = JSON.parse(memory);
                 }
             });
+            game.settings.register("core", "sheetToolbarCollapsed", {
+                name: "Actor Sheet Toolbar Collapsed",
+                hint: "",
+                default: false,
+                type: Boolean,
+                onChange: collapsed => {
+                    this.toolbarCollapsed = collapsed;
+                    if (collapsed) {
+                        $('.window-app.sheet').addClass('toolbar-collapsed');
+                    } else {
+                        $('.window-app.sheet').removeClass('toolbar-collapsed');
+                    }
+                }
+            });
 
             this.optMemory = JSON.parse(game.settings.get(game.data.system.name, 'promptOptionsMemory'));
             this.macros = JSON.parse(game.settings.get(game.data.system.name, "macros"));
+            this.toolbarCollapsed = game.settings.get("core", "sheetToolbarCollapsed");
 
             // Handle update from 0.1.5 to 0.2.0
             if(!this._update015to020()) { this.renderMacroBar(); }
@@ -64,10 +81,40 @@ class EnhancementSuite {
      * Hook into the render call for the Actor5eSheet
      */
     hookActor5eSheet() {
-        Hooks.on('renderActorSheet', (app, html, data) => {
-
-        });
         Hooks.on('renderActor5eSheet', (app, html, data) => {
+            if (!data.owner) return;
+
+            const windowContent = html.parent().parent();
+            const toolbar = $('<div class="actor-sheet-toolbar"><div class="toolbar-header">Toolbar</div></div>');
+
+            if (this.toolbarCollapsed) {
+                windowContent.addClass('toolbar-collapsed');
+            }
+
+            windowContent.find('.actor-sheet-toolbar').remove();
+            windowContent.prepend(toolbar);
+
+            $('.actor-sheet-toolbar .toolbar-header').dblclick(() => {
+                windowContent.toggleClass('toolbar-collapsed');
+                this.toolbarCollapsed = !this.toolbarCollapsed;
+                game.settings.set("core", "sheetToolbarCollapsed", this.toolbarCollapsed);
+            });
+
+            // Macro Configuration Button
+            this.addToolbarButton(toolbar, 'far fa-keyboard', 'Macros', () => {
+                this.macroDialog(app.actor);
+            });
+
+            Hooks.call('toolbarReady', toolbar, app.actor);
+            Hooks.call('toolbar5eReady', toolbar, app.actor);
+        });
+    }
+
+    /**
+     * Hook into the render call for the ActorPFSheet
+     */
+    hookActorPFSheet() {
+        Hooks.on('renderActorPFSheet', (app, html, data) => {
             if (!data.owner) return;
 
             const windowContent = html.parent();
@@ -76,37 +123,8 @@ class EnhancementSuite {
             windowContent.find('.actor-sheet-toolbar').remove();
             windowContent.prepend(toolbar);
 
-            // Macro Configuration Button
-            this.addToolbarButton(toolbar, 'far fa-keyboard', 'Macros', () => {
-                this.macroDialog(app.actor);
-            });
-
-            // Export Button
-            this.addToolbarButton(toolbar, 'fas fa-download', 'Export Data', () => {
-                this.exportActor(app.actor);
-            });
-
-            // Import Button
-            this.addToolbarButton(toolbar, 'fas fa-upload', 'Import Data', () => {
-                const input = $('<input type="file" accept="application/json" class="file-import hide" />');
-                toolbar.find('.file-import').remove();
-                toolbar.append(input);
-                input.change((e) => {
-                    for (let i = 0; i < e.target.files.length; i++) {
-                        const file = e.target.files[i];
-                        if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (e) => {
-                                this.importActor(app.actor, JSON.parse(e.target.result));
-                                toolbar.find('.file-import').remove();
-                            };
-                            reader.readAsText(file);
-                        }
-                    }
-                }).click();
-            });
-
-            Hooks.call('toolbar5eReady', toolbar, app.actor);
+            Hooks.call('toolbarReady', toolbar, app.actor);
+            Hooks.call('toolbarPFReady', toolbar, app.actor);
         });
     }
 
@@ -170,6 +188,38 @@ class EnhancementSuite {
     }
 
     /**
+     * Hook into the render call for the Toolbar
+     */
+    hookToolbarReady() {
+        Hooks.on('toolbarReady', (toolbar, actor) => {
+            // Export Button
+            this.addToolbarButton(toolbar, 'fas fa-download', 'Export Data', () => {
+                this.exportActor(actor);
+            });
+
+            // Import Button
+            this.addToolbarButton(toolbar, 'fas fa-upload', 'Import Data', () => {
+                const input = $('<input type="file" accept="application/json" class="file-import hide" />');
+                toolbar.find('.file-import').remove();
+                toolbar.append(input);
+                input.change((e) => {
+                    for (let i = 0; i < e.target.files.length; i++) {
+                        const file = e.target.files[i];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                this.importActor(actor, JSON.parse(e.target.result));
+                                toolbar.find('.file-import').remove();
+                            };
+                            reader.readAsText(file);
+                        }
+                    }
+                }).click();
+            });
+        });
+    }
+
+    /**
      * Hook into the canvas events
      */
     hookCanvasEvents() {
@@ -211,7 +261,7 @@ class EnhancementSuite {
      */
     addToolbarButton(toolbar, icon, label, callback = () => {}) {
         const id = label.toLowerCase().replace(/[^a-z0-9]+/gi,'-');
-        const button = $('<button class="btn btn-dark btn-'+id+'"><i class="'+icon+'"></i> '+label+'</button>');
+        const button = $('<button class="btn btn-dark btn-'+id+'" title="'+label.replace(/"/g, '\\"')+'"><i class="'+icon+'"></i><span>'+label+'</span></button>');
         toolbar.find('.btn-'+id).remove();
         toolbar.append(button);
         button.click((ev) => {
@@ -682,7 +732,7 @@ class EnhancementSuite {
      * @param html
      */
     chatListeners(html) {
-        new ContextMenu(html, ".damage-card", {
+        /*new ContextMenu(html, ".damage-card", {
             "Apply Damage": {
                 icon: '<i class="fas fa-user-minus"></i>',
                 callback: event => this.applyDamage(event, 1)
@@ -703,7 +753,7 @@ class EnhancementSuite {
                 icon: '<i class="fas fa-user"></i>',
                 callback: event => this.applyDamageByType(event)
             }
-        });
+        });*/
     }
 
     /**
@@ -1398,7 +1448,8 @@ class EnhancementSuite {
 
 CONFIG.EnhancementSuite = {
     settings: {
-        dnd5e: "dnd5e"
+        dnd5e: "dnd5e",
+        pathfinder: "pathfinder"
     },
     actorDataReplacements: {
         'skills.acr.mod': 'acrobatics',
