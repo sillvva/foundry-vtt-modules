@@ -42,7 +42,7 @@ class BeyondImporter extends Application {
      */
     hookActorList() {
         Hooks.on('renderActorList', (app, html, data) => {
-            const importButton = $('<button class="import-dndbeyond-list" style="min-width: 96%;"><span class="fas fa-file-import"></span> Beyond Import</button>');
+            const importButton = $('<button class="import-dndbeyond-list" style="min-width: 96%;"><i class="fas fa-file-import"></i> Beyond Import</button>');
 
             html.find('.import-dndbeyond-list').remove();
             html.find('.directory-footer').append(importButton);
@@ -60,7 +60,7 @@ class BeyondImporter extends Application {
      */
     hookToolbar5eReady() {
         Hooks.on('toolbar5eReady', (html, actor) => {
-            const importButton = $('<button class="btn btn-small btn-dark import-dndbeyond-sheet" style="min-width: 96%;"><span class="fas fa-file-import"></span> D&D Beyond<br>Character Import</button>');
+            const importButton = $('<button class="btn btn-small btn-dark import-dndbeyond-sheet" title="D&D Beyond Character Import" style="min-width: 96%;"><i class="fas fa-file-import"></i><span>D&D Beyond<br>Character Import</span></button>');
 
             html.parent().parent().find('.import-dndbeyond-sheet').remove();
             html.find('.btn-import-data').after(importButton.clone());

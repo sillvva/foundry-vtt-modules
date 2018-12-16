@@ -44,9 +44,19 @@ class EnhancementSuite {
                     this.optMemory = JSON.parse(memory);
                 }
             });
+            game.settings.register("core", "sheetToolbarCollapsed", {
+                name: "Actor Sheet Toolbar Collapsed",
+                hint: "",
+                default: false,
+                type: Boolean,
+                onChange: collapsed => {
+                    this.toolbarCollapsed = collapsed;
+                }
+            });
 
             this.optMemory = JSON.parse(game.settings.get(game.data.system.name, 'promptOptionsMemory'));
             this.macros = JSON.parse(game.settings.get(game.data.system.name, "macros"));
+            this.toolbarCollapsed = game.settings.get("core", "sheetToolbarCollapsed");
 
             // Handle update from 0.1.5 to 0.2.0
             if(!this._update015to020()) { this.renderMacroBar(); }
@@ -69,11 +79,21 @@ class EnhancementSuite {
         Hooks.on('renderActor5eSheet', (app, html, data) => {
             if (!data.owner) return;
 
-            const windowContent = html.parent();
+            const windowContent = html.parent().parent();
             const toolbar = $('<div class="actor-sheet-toolbar"><div class="toolbar-header">Toolbar</div></div>');
+
+            if (this.toolbarCollapsed) {
+                windowContent.addClass('toolbar-collapsed');
+            }
 
             windowContent.find('.actor-sheet-toolbar').remove();
             windowContent.prepend(toolbar);
+
+            $('.actor-sheet-toolbar .toolbar-header').dblclick(() => {
+                windowContent.toggleClass('toolbar-collapsed');
+                this.toolbarCollapsed = !this.toolbarCollapsed;
+                game.settings.set("core", "sheetToolbarCollapsed", this.toolbarCollapsed);
+            });
 
             // Macro Configuration Button
             this.addToolbarButton(toolbar, 'far fa-keyboard', 'Macros', () => {
@@ -236,7 +256,7 @@ class EnhancementSuite {
      */
     addToolbarButton(toolbar, icon, label, callback = () => {}) {
         const id = label.toLowerCase().replace(/[^a-z0-9]+/gi,'-');
-        const button = $('<button class="btn btn-dark btn-'+id+'"><i class="'+icon+'"></i> '+label+'</button>');
+        const button = $('<button class="btn btn-dark btn-'+id+'" title="'+label.replace(/"/g, '\\"')+'"><i class="'+icon+'"></i><span>'+label+'</span></button>');
         toolbar.find('.btn-'+id).remove();
         toolbar.append(button);
         button.click((ev) => {
@@ -707,7 +727,7 @@ class EnhancementSuite {
      * @param html
      */
     chatListeners(html) {
-        new ContextMenu(html, ".damage-card", {
+        /*new ContextMenu(html, ".damage-card", {
             "Apply Damage": {
                 icon: '<i class="fas fa-user-minus"></i>',
                 callback: event => this.applyDamage(event, 1)
@@ -728,7 +748,7 @@ class EnhancementSuite {
                 icon: '<i class="fas fa-user"></i>',
                 callback: event => this.applyDamageByType(event)
             }
-        });
+        });*/
     }
 
     /**
