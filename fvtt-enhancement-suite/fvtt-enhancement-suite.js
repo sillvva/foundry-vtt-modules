@@ -732,28 +732,30 @@ class EnhancementSuite {
      * @param html
      */
     chatListeners(html) {
-        /*new ContextMenu(html, ".damage-card", {
-            "Apply Damage": {
-                icon: '<i class="fas fa-user-minus"></i>',
-                callback: event => this.applyDamage(event, 1)
-            },
-            "Apply Healing": {
-                icon: '<i class="fas fa-user-plus"></i>',
-                callback: event => this.applyDamage(event, -1)
-            },
-            "Double Damage": {
-                icon: '<i class="fas fa-user-injured"></i>',
-                callback: event => this.applyDamage(event, 2)
-            },
-            "Half Damage": {
-                icon: '<i class="fas fa-user-shield"></i>',
-                callback: event => this.applyDamage(event, 0.5)
-            },
-            "Apply Damage by Type": {
-                icon: '<i class="fas fa-user"></i>',
-                callback: event => this.applyDamageByType(event)
-            }
-        });*/
+        if ($('.damage-card').length > 0) {
+            new ContextMenu(html, ".damage-card", {
+                "Apply Damage": {
+                    icon: '<i class="fas fa-user-minus"></i>',
+                    callback: event => this.applyDamage(event, 1)
+                },
+                "Apply Healing": {
+                    icon: '<i class="fas fa-user-plus"></i>',
+                    callback: event => this.applyDamage(event, -1)
+                },
+                "Double Damage": {
+                    icon: '<i class="fas fa-user-injured"></i>',
+                    callback: event => this.applyDamage(event, 2)
+                },
+                "Half Damage": {
+                    icon: '<i class="fas fa-user-shield"></i>',
+                    callback: event => this.applyDamage(event, 0.5)
+                },
+                "Apply Damage by Type": {
+                    icon: '<i class="fas fa-user"></i>',
+                    callback: event => this.applyDamageByType(event)
+                }
+            });
+        }
     }
 
     /**
