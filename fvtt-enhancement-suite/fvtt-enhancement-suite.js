@@ -13,7 +13,9 @@ class EnhancementSuite {
 
         // Register hooks
         this.hookReady();
+        this.hookToolbarReady();
         this.hookActor5eSheet();
+        this.hookActorPFSheet();
         this.hookActor();
         this.hookChat();
     }
@@ -64,9 +66,6 @@ class EnhancementSuite {
      * Hook into the render call for the Actor5eSheet
      */
     hookActor5eSheet() {
-        Hooks.on('renderActorSheet', (app, html, data) => {
-
-        });
         Hooks.on('renderActor5eSheet', (app, html, data) => {
             if (!data.owner) return;
 
@@ -81,32 +80,26 @@ class EnhancementSuite {
                 this.macroDialog(app.actor);
             });
 
-            // Export Button
-            this.addToolbarButton(toolbar, 'fas fa-download', 'Export Data', () => {
-                this.exportActor(app.actor);
-            });
-
-            // Import Button
-            this.addToolbarButton(toolbar, 'fas fa-upload', 'Import Data', () => {
-                const input = $('<input type="file" accept="application/json" class="file-import hide" />');
-                toolbar.find('.file-import').remove();
-                toolbar.append(input);
-                input.change((e) => {
-                    for (let i = 0; i < e.target.files.length; i++) {
-                        const file = e.target.files[i];
-                        if (file) {
-                            const reader = new FileReader();
-                            reader.onload = (e) => {
-                                this.importActor(app.actor, JSON.parse(e.target.result));
-                                toolbar.find('.file-import').remove();
-                            };
-                            reader.readAsText(file);
-                        }
-                    }
-                }).click();
-            });
-
+            Hooks.call('toolbarReady', toolbar, app.actor);
             Hooks.call('toolbar5eReady', toolbar, app.actor);
+        });
+    }
+
+    /**
+     * Hook into the render call for the ActorPFSheet
+     */
+    hookActorPFSheet() {
+        Hooks.on('renderActorPFSheet', (app, html, data) => {
+            if (!data.owner) return;
+
+            const windowContent = html.parent();
+            const toolbar = $('<div class="actor-sheet-toolbar"><div class="toolbar-header">Toolbar</div></div>');
+
+            windowContent.find('.actor-sheet-toolbar').remove();
+            windowContent.prepend(toolbar);
+
+            Hooks.call('toolbarReady', toolbar, app.actor);
+            Hooks.call('toolbarPFReady', toolbar, app.actor);
         });
     }
 
@@ -166,6 +159,38 @@ class EnhancementSuite {
                 });
                 return false;
             }
+        });
+    }
+
+    /**
+     * Hook into the render call for the Toolbar
+     */
+    hookToolbarReady() {
+        Hooks.on('toolbarReady', (toolbar, actor) => {
+            // Export Button
+            this.addToolbarButton(toolbar, 'fas fa-download', 'Export Data', () => {
+                this.exportActor(actor);
+            });
+
+            // Import Button
+            this.addToolbarButton(toolbar, 'fas fa-upload', 'Import Data', () => {
+                const input = $('<input type="file" accept="application/json" class="file-import hide" />');
+                toolbar.find('.file-import').remove();
+                toolbar.append(input);
+                input.change((e) => {
+                    for (let i = 0; i < e.target.files.length; i++) {
+                        const file = e.target.files[i];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                this.importActor(actor, JSON.parse(e.target.result));
+                                toolbar.find('.file-import').remove();
+                            };
+                            reader.readAsText(file);
+                        }
+                    }
+                }).click();
+            });
         });
     }
 
@@ -1398,7 +1423,8 @@ class EnhancementSuite {
 
 CONFIG.EnhancementSuite = {
     settings: {
-        dnd5e: "dnd5e"
+        dnd5e: "dnd5e",
+        pathfinder: "pathfinder"
     },
     actorDataReplacements: {
         'skills.acr.mod': 'acrobatics',
