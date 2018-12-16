@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.3
+ * @version 0.2.4
  */
 
 class EnhancementSuite {
@@ -51,6 +51,11 @@ class EnhancementSuite {
                 type: Boolean,
                 onChange: collapsed => {
                     this.toolbarCollapsed = collapsed;
+                    if (collapsed) {
+                        $('.window-app.sheet').addClass('toolbar-collapsed');
+                    } else {
+                        $('.window-app.sheet').removeClass('toolbar-collapsed');
+                    }
                 }
             });
 
