@@ -15,7 +15,6 @@ class EnhancementSuite {
         this.hookReady();
         this.hookToolbarReady();
         this.hookActor5eSheet();
-        this.hookActorPFSheet();
         this.hookActor();
         this.hookChat();
     }
@@ -85,11 +84,14 @@ class EnhancementSuite {
             if (!data.owner) return;
 
             const windowContent = html.parent().parent();
-            const toolbar = $('<div class="actor-sheet-toolbar"><div class="toolbar-header">Toolbar</div></div>');
+            windowContent.addClass('actor-sheet');
 
             if (this.toolbarCollapsed) {
                 windowContent.addClass('toolbar-collapsed');
             }
+
+            const toolbar = $('<div class="actor-sheet-toolbar"><div class="toolbar-header">Toolbar</div><div class="toolbar-body"></div></div>');
+            const toolbarBody = toolbar.find('.toolbar-body');
 
             windowContent.find('.actor-sheet-toolbar').remove();
             windowContent.prepend(toolbar);
@@ -101,30 +103,12 @@ class EnhancementSuite {
             });
 
             // Macro Configuration Button
-            this.addToolbarButton(toolbar, 'far fa-keyboard', 'Macros', () => {
+            this.addToolbarButton(toolbarBody, 'far fa-keyboard', 'Macros', () => {
                 this.macroDialog(app.actor);
             });
 
-            Hooks.call('toolbarReady', toolbar, app.actor);
-            Hooks.call('toolbar5eReady', toolbar, app.actor);
-        });
-    }
-
-    /**
-     * Hook into the render call for the ActorPFSheet
-     */
-    hookActorPFSheet() {
-        Hooks.on('renderActorPFSheet', (app, html, data) => {
-            if (!data.owner) return;
-
-            const windowContent = html.parent();
-            const toolbar = $('<div class="actor-sheet-toolbar"><div class="toolbar-header">Toolbar</div></div>');
-
-            windowContent.find('.actor-sheet-toolbar').remove();
-            windowContent.prepend(toolbar);
-
-            Hooks.call('toolbarReady', toolbar, app.actor);
-            Hooks.call('toolbarPFReady', toolbar, app.actor);
+            Hooks.call('toolbarReady', toolbarBody, app.actor);
+            Hooks.call('toolbar5eReady', toolbarBody, app.actor);
         });
     }
 
@@ -162,9 +146,31 @@ class EnhancementSuite {
      * Hook into the render call for the ChatLog
      */
     hookChat() {
-        Hooks.on('renderChatLog', (log, html, data) => {
-            this.chatListeners(log, html, data);
+        $(document).arrive('.message', function() {
+            new ContextMenu($(this), ".damage-card", {
+                "Apply Damage": {
+                    icon: '<i class="fas fa-user-minus"></i>',
+                    callback: event => this.applyDamage(event, 1)
+                },
+                "Apply Healing": {
+                    icon: '<i class="fas fa-user-plus"></i>',
+                    callback: event => this.applyDamage(event, -1)
+                },
+                "Double Damage": {
+                    icon: '<i class="fas fa-user-injured"></i>',
+                    callback: event => this.applyDamage(event, 2)
+                },
+                "Half Damage": {
+                    icon: '<i class="fas fa-user-shield"></i>',
+                    callback: event => this.applyDamage(event, 0.5)
+                },
+                "Apply Damage by Type": {
+                    icon: '<i class="fas fa-user"></i>',
+                    callback: event => this.applyDamageByType(event)
+                }
+            });
         });
+
         Hooks.on('chatMessage', (chatLog, chatData) => {
             const hasMacro = chatData.content.match(/{{.+}}|\[\[.+\]\]|<<.+>>|\?{.+}|@{.+}/);
             if (hasMacro) {
@@ -725,37 +731,6 @@ class EnhancementSuite {
 
         if ( chatData["roll"] ) chatData["roll"].toMessage();
         else ChatMessage.create(chatData, true);
-    }
-
-    /**
-     * Create context menu for chat items
-     * @param html
-     */
-    chatListeners(html) {
-        if ($('.damage-card').length > 0) {
-            new ContextMenu(html, ".damage-card", {
-                "Apply Damage": {
-                    icon: '<i class="fas fa-user-minus"></i>',
-                    callback: event => this.applyDamage(event, 1)
-                },
-                "Apply Healing": {
-                    icon: '<i class="fas fa-user-plus"></i>',
-                    callback: event => this.applyDamage(event, -1)
-                },
-                "Double Damage": {
-                    icon: '<i class="fas fa-user-injured"></i>',
-                    callback: event => this.applyDamage(event, 2)
-                },
-                "Half Damage": {
-                    icon: '<i class="fas fa-user-shield"></i>',
-                    callback: event => this.applyDamage(event, 0.5)
-                },
-                "Apply Damage by Type": {
-                    icon: '<i class="fas fa-user"></i>',
-                    callback: event => this.applyDamageByType(event)
-                }
-            });
-        }
     }
 
     /**
