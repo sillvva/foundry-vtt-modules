@@ -33,6 +33,16 @@
     grid-template-rows: 30px auto;
     grid-gap: 0;
 }
+.window-app.sheet .window-content {
+    resize: both;
+    overflow: auto;
+}
+.window-app.scene-sheet {
+    display: flex;
+}
+.window-app.dialog .window-content {
+    resize: none;
+}
 .window-app.sheet.toolbar-collapsed {
     grid-template-columns: 60px auto;
     min-width: 700px;
@@ -91,6 +101,16 @@
 }
 .dnd5e.actor-sheet .sheet-header .charlevel .experience > input[type="text"] + span {
     flex: none !important;
+}
+.window-app.sheet::after {
+    content: ' ';
+    position: absolute;
+    cursor: se-resize;
+    display: block;
+    width: 16px;
+    height: 16px;
+    bottom: 0;
+    right: 0;
 }
 
 /**
