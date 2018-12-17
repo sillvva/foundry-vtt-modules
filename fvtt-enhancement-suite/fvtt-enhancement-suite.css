@@ -23,33 +23,20 @@
 /**
  * Resizable Actor Sheet
  */
-.window-app.sheet {
-    display: grid;
+.window-app.sheet.actor-sheet {
     resize: both;
     overflow: auto;
-    min-width: 816px;
-    min-height: 600px;
-    grid-template-columns: 160px auto;
-    grid-template-rows: 30px auto;
-    grid-gap: 0;
+    min-width: 800px;
+    min-height: 675px;
+    padding-left: 160px;
 }
-.window-app.sheet .window-content {
-    resize: both;
-    overflow: auto;
-}
-.window-app.scene-sheet {
-    display: flex;
-}
-.window-app.dialog .window-content {
-    resize: none;
-}
-.window-app.sheet.toolbar-collapsed {
-    grid-template-columns: 60px auto;
+.window-app.sheet.actor-sheet.toolbar-collapsed {
+    padding-left: 60px;
     min-width: 700px;
 }
-.window-app.sheet .window-header {
-    grid-column-start: 2;
-    grid-column-end: 3;
+.window-app.sheet.actor-sheet .window-content {
+    resize: both;
+    overflow: auto;
 }
 .dnd5e.actor-sheet {
     position: relative;
@@ -112,32 +99,45 @@
     bottom: 0;
     right: 0;
 }
+.window-app.dialog .window-content {
+    resize: none;
+}
 
 /**
  * Actor Sheet Toolbar
  */
 
 .actor-sheet-toolbar {
-    height: 100%;
-    top: 30px;
-    right: 100%;
-    padding: 8px;
-    background: rgba(255,255,255,0.3);
+    position: absolute;
+    top: 0;
+    left: 0;
+    bottom: 0;
     border-radius: 0 0 0 5px;
     overflow-y: auto;
-    grid-row-start: 2;
-    grid-row-end: 3;
+    width: 160px;
 }
 .actor-sheet-toolbar .toolbar-header {
     position: absolute;
     top: 0;
     left: 0;
-    width: 160px;
+    right: 0;
     height: 30px;
     border-radius: 5px 5px 0 0;
     padding: 5px 8px;
     color: #fff;
     text-shadow: 1px 1px 1px #000;
+}
+.actor-sheet-toolbar .toolbar-body {
+    position: absolute;
+    top: 30px;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    border-radius: 0 0 0 5px;
+    padding: 8px;
+    color: #fff;
+    text-shadow: 1px 1px 1px #000;
+    background-color: rgba(255,255,255,0.3);
 }
 .actor-sheet-toolbar .btn {
     display: inline-block;
@@ -161,16 +161,20 @@
 .actor-sheet-toolbar .btn span {
     margin-left: 5px;
 }
-.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .fa,
-.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .far,
-.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .fas {
+.window-app.actor-sheet.toolbar-collapsed .actor-sheet-toolbar .toolbar-header,
+.window-app.actor-sheet.toolbar-collapsed .actor-sheet-toolbar .toolbar-body {
+    width: 60px;
+}
+.window-app.actor-sheet.toolbar-collapsed .actor-sheet-toolbar .fa,
+.window-app.actor-sheet.toolbar-collapsed .actor-sheet-toolbar .far,
+.window-app.actor-sheet.toolbar-collapsed .actor-sheet-toolbar .fas {
     margin-right: 16px;
 }
-.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .btn {
+.window-app.actor-sheet.toolbar-collapsed .actor-sheet-toolbar .btn {
     white-space: nowrap;
     overflow: hidden;
 }
-.window-app.sheet.toolbar-collapsed .actor-sheet-toolbar .btn br {
+.window-app.actor-sheet.toolbar-collapsed .actor-sheet-toolbar .btn br {
     display: none;
 }
 .actor-sheet-toolbar .btn-dark {
@@ -367,6 +371,9 @@
 }
 .damage-card details.normal-roll.crit {
     display: block;
+}
+.damage-card span[title] {
+    background: rgba(0,0,0,0.15); padding: 0 2px;
 }
 
 /**

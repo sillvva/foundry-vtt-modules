@@ -5,7 +5,7 @@
   "version": "0.2.4",
   "author": "Matt DeKok (Sillvva)",
   "systems": ["dnd5e"],
-  "scripts": ["./math.js", "./save.js", "./inline-dice-parser.js","./fvtt-enhancement-suite.js"],
+  "scripts": ["./scripts/math.js", "./scripts/arrive.min.js", "./scripts/inline-dice-parser.js","./fvtt-enhancement-suite.js"],
   "styles": ["./fvtt-enhancement-suite.css"],
   "packs": []
 }
