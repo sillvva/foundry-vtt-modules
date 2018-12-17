@@ -37,6 +37,12 @@
     resize: both;
     overflow: auto;
 }
+.window-app.scene-sheet {
+    display: flex;
+}
+.window-app.dialog .window-content {
+    resize: none;
+}
 .window-app.sheet.toolbar-collapsed {
     grid-template-columns: 60px auto;
     min-width: 700px;
