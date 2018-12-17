@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.4
+ * @version 0.2.5
  */
 
 class EnhancementSuite {
@@ -146,27 +146,27 @@ class EnhancementSuite {
      * Hook into the render call for the ChatLog
      */
     hookChat() {
-        $(document).arrive('.message', function() {
-            new ContextMenu($(this), ".damage-card", {
+        $(document).arrive('.message', (el) => {
+            new ContextMenu($(el), ".damage-card", {
                 "Apply Damage": {
                     icon: '<i class="fas fa-user-minus"></i>',
-                    callback: event => this.applyDamage(event, 1)
+                    callback: event => this.applyDamage($(el), 1)
                 },
                 "Apply Healing": {
                     icon: '<i class="fas fa-user-plus"></i>',
-                    callback: event => this.applyDamage(event, -1)
+                    callback: event => this.applyDamage($(el), -1)
                 },
                 "Double Damage": {
                     icon: '<i class="fas fa-user-injured"></i>',
-                    callback: event => this.applyDamage(event, 2)
+                    callback: event => this.applyDamage($(el), 2)
                 },
                 "Half Damage": {
                     icon: '<i class="fas fa-user-shield"></i>',
-                    callback: event => this.applyDamage(event, 0.5)
+                    callback: event => this.applyDamage($(el), 0.5)
                 },
                 "Apply Damage by Type": {
                     icon: '<i class="fas fa-user"></i>',
-                    callback: event => this.applyDamageByType(event)
+                    callback: event => this.applyDamageByType($(el))
                 }
             });
         });
@@ -738,10 +738,8 @@ class EnhancementSuite {
      * @param event
      * @param multiplier
      */
-    applyDamage(event, multiplier) {
-        let roll = $(event.currentTarget).parents('.damage-card'),
-            value = Math.floor(this.getTotalDamage(roll) * multiplier);
-
+    applyDamage(damageCard, multiplier) {
+        const value = Math.floor(this.getTotalDamage($(damageCard)) * multiplier);
         this.constructor.applyDamageAmount(value);
     }
 
@@ -763,9 +761,8 @@ class EnhancementSuite {
      * Apply damage by type to selected tokens
      * @param event
      */
-    applyDamageByType(event) {
-        const roll = $(event.currentTarget).parents('.damage-card');
-        let types = this.getTotalDamageByType(roll);
+    applyDamageByType(damageCard) {
+        let types = this.getTotalDamageByType(damageCard);
         this.promptDamageTypes(types.reverse());
     }
 
@@ -825,6 +822,7 @@ class EnhancementSuite {
         let types = [];
 
         const norm = $(chatCard).find('normaldamage').text().match(rgx);
+        console.log(chatCard);
         if (norm) {
             norm.forEach((dmg) => {
                 const parts = dmg.split(' ');
