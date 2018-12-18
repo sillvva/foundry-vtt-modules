@@ -1,7 +1,7 @@
 /**
  * Inline Dice Parser
  * @author Matt DeKok <Sillvva>
- * @version 0.1.0
+ * @version 0.1.1
  */
 
 class InlineDiceParser {
@@ -69,13 +69,13 @@ class InlineDiceParser {
      * @private
      */
     _parse(xml, nodeName, toolTip) {
-        const idRgx = /^(@(?<id>[^:]+):)/i;
+        const idRgx = /^(@([^:]+):)/i;
         if(xml.childNodes.length === 1 ? (xml.childNodes[0].nodeName === '#text') : false) {
             const m = xml.innerHTML.match(idRgx);
-            return this._interpretNode(xml.innerHTML.replace(idRgx,''), nodeName, m ? m.groups.id : Object.keys(this).length);
+            return this._interpretNode(xml.innerHTML.replace(idRgx,''), nodeName, m ? m[2] : Object.keys(this).length);
         } else if(xml.childNodes.length === 0) {
             const m = xml.nodeValue.match(idRgx);
-            return this._interpretNode(xml.nodeValue.replace(idRgx,'') || '', nodeName, m ? m.groups.id : Object.keys(this).length);
+            return this._interpretNode(xml.nodeValue.replace(idRgx,'') || '', nodeName, m ? m[2] : Object.keys(this).length);
         } else {
             let out = '';
             let outVal = '';

@@ -12,6 +12,9 @@
         {{#if hasMacros.tools}}
         <a class="item flex-1" data-tab="tools">Tools</a>
         {{/if}}
+        {{#if hasMacros.feats}}
+        <a class="item flex-1" data-tab="feats">Feats</a>
+        {{/if}}
         <a class="item flex-1" data-tab="custom">Custom</a>
     </nav>
 
@@ -282,6 +285,23 @@
             <div class="tool item" data-tool-id="{{tool.id}}">
                 <div class="tool-enable"><input type="checkbox" class="enable" {{checked tool.enabled}} /></div>
                 <div class="tool-name">{{tool.name}}</div>
+            </div>
+            {{/each}}
+        </div>
+    </div>
+    {{/if}}
+
+    {{#if hasMacros.feats}}
+    <div class="tab" data-tab="feats">
+        <div class="macros">
+            <div class="feats-header">
+                <div class="feat-enable">&nbsp;</div>
+                <div class="feat-name">Feat</div>
+            </div>
+            {{#each macros.feats as |feat tid|}}
+            <div class="feat item" data-feat-id="{{feat.id}}">
+                <div class="feat-enable"><input type="checkbox" class="enable" {{checked feat.enabled}} /></div>
+                <div class="feat-name">{{feat.name}}</div>
             </div>
             {{/each}}
         </div>

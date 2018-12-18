@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.5
+ * @version 0.2.4
  */
 
 class EnhancementSuite {
@@ -18,6 +18,8 @@ class EnhancementSuite {
         this.hookActor();
         this.hookChat();
     }
+
+    // HOOKS
 
     /**
      * Hook into the ready call for the VTT application
@@ -70,7 +72,7 @@ class EnhancementSuite {
             this.actors = duplicate(game.actors.source);
 
             // Ensure existing macros actor ids match up with current worlds's actors with same name
-            this.assignMacros();
+            this._assignMacros();
 
             this.hookCanvasEvents();
         });
@@ -174,13 +176,12 @@ class EnhancementSuite {
         Hooks.on('chatMessage', (chatLog, chatData) => {
             const hasMacro = chatData.content.match(/{{.+}}|\[\[.+\]\]|<<.+>>|\?{.+}|@{.+}/);
             if (hasMacro) {
-                const hasRoll = chatData.roll;
                 const cTokens = canvas.tokens.controlledTokens;
                 if (cTokens.length === 1) {
                     var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
                 }
-                this.parseMessageContent(chatData.content, actor, !hasRoll).then(content => {
-                    if (hasRoll) {
+                this.parseMessageContent(chatData.content, actor, !chatData.roll).then(content => {
+                    if (chatData.roll) {
                         const data = Roll._getActorData();
                         const roll = new Roll(content, data);
                         roll.toMessage();
@@ -237,25 +238,7 @@ class EnhancementSuite {
         });
     }
 
-    /**
-     * Ensure existing macros actor ids match up with current worlds's actors with same name
-     */
-    assignMacros(store = true) {
-        this.macros = this.macros.map((macro, mid) => {
-            game.actors.source
-                .filter(a => a.name === macro.actor.name && a._id !== macro.actor.id)
-                .forEach(a => {
-                    if (game.user.isGM || Object.keys(a.permission).find(p => p[0] === game.user.data._id && p[1] === 3)) {
-                        macro.actor.id = a._id;
-                    }
-                });
-            macro.mid = mid;
-            return macro;
-        });
-        if (store) {
-            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros));
-        }
-    }
+    // TOOLBAR
 
     /**
      * Add button to the toolbar
@@ -277,6 +260,8 @@ class EnhancementSuite {
         return button;
     }
 
+    // MACRO CONFIGURATION
+
     /**
      * Render the macro configuration dialog box
      * @param {Object} actor - actor entity
@@ -295,6 +280,7 @@ class EnhancementSuite {
                 weapons: items.filter(item => item.type === 'weapon').length > 0,
                 spells: items.filter(item => item.type === 'spell').length > 0,
                 tools: items.filter(item => item.type === 'tool').length > 0,
+                feat: items.filter(item => item.type === 'feat').length > 0,
                 abilities5e: false,
                 saves5e: false
             },
@@ -323,6 +309,11 @@ class EnhancementSuite {
                 tools: items.filter(item => item.type === 'tool')
                     .map(item => {
                         item.enabled = macros.find(macro => macro.type === 'tool' && parseInt(macro.iid) === item.id) != null;
+                        return item;
+                    }),
+                feats: items.filter(item => item.type === 'feat')
+                    .map(item => {
+                        item.enabled = macros.find(macro => macro.type === 'feat' && parseInt(macro.iid) === item.id) != null;
                         return item;
                     }),
                 custom: macros.filter(macro => macro.type === 'custom')
@@ -480,6 +471,23 @@ class EnhancementSuite {
                                 }
                             }
 
+                            if (data.hasMacros.feats) {
+                                // Tool Macros
+                                const featEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="feats"] .feat');
+                                for(let i = 0; i < featEntries.length; i++) {
+                                    if (!$(featEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(featEntries[i]).find('.feat-name').html();
+                                    let tid = $(featEntries[i]).attr('data-feat-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(tid),
+                                        type: 'feat',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
+                            }
+
                             // Custom Macros
                             const macroEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="custom"] .macro');
                             for(let i = 0; i < macroEntries.length; i++) {
@@ -506,7 +514,7 @@ class EnhancementSuite {
                     }
                 }
             }, {
-                width: 600
+                width: 650
             }).render(true);
 
             setTimeout(() => {
@@ -545,14 +553,16 @@ class EnhancementSuite {
         });
     }
 
+    // MACRO BAR
+
     /**
-     * Render the 5e macro bar
+     * Render the macro bar
      */
     renderMacroBar() {
         if(this.macros.length === 0) return;
 
         // Ensure existing macros actor ids match up with current worlds's actors with same name
-        this.assignMacros(false);
+        this._assignMacros(false);
 
         // Get the macros sorted into actors
         let macroActors = [];
@@ -592,12 +602,26 @@ class EnhancementSuite {
                 }
 
                 if (game.data.system.name == CONFIG.EnhancementSuite.settings.dnd5e) {
-                    if (macro.type === 'weapon' || macro.type === 'spell') {
+                    if (macro.type === 'weapon') {
+                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
+                        let itemId = Number(macro.iid),
+                            Item = CONFIG.Item.entityClass,
+                            item = new Item(actor.items.find(i => i.id === itemId), actor);;
+                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
+                            item.data.data.description.value = message;
+                            item.roll();
+                        });
+                    }
+
+                    if (macro.type === 'spell') {
                         let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
                         let itemId = Number(macro.iid),
                             Item = CONFIG.Item.entityClass,
                             item = new Item(actor.items.find(i => i.id === itemId), actor);
-                        item.roll();
+                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
+                            item.data.data.description.value = message;
+                            item.roll();
+                        });
                     }
 
                     if (macro.type === 'tool') {
@@ -605,7 +629,21 @@ class EnhancementSuite {
                         let itemId = Number(macro.iid),
                             Item = CONFIG.Item.entityClass,
                             item = new Item(actor.items.find(i => i.id === itemId), actor);
-                        item.roll();
+                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
+                            item.data.data.description.value = message;
+                            item.roll();
+                        });
+                    }
+
+                    if (macro.type === 'feat') {
+                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
+                        let itemId = Number(macro.iid),
+                            Item = CONFIG.Item.entityClass,
+                            item = new Item(actor.items.find(i => i.id === itemId), actor);
+                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
+                            item.data.data.description.value = message;
+                            item.roll();
+                        });
                     }
 
                     if (macro.type === 'saving-throw') {
@@ -652,10 +690,10 @@ class EnhancementSuite {
                                         actor.rollSkill(skl);
                                     });
                                 });
-                            }, 10);
+                            }, 20);
                         } else {
                             if (['str', 'dex', 'con', 'int', 'wis', 'cha'].indexOf(macro.subtype) >= 0) {
-                                actor.rollAbilitySave(macro.subtype);
+                                actor.rollAbilityTest(macro.subtype);
                             }
                             if (['acr', 'ani', 'arc', 'ath', 'dec', 'his',
                                     'ins', 'itm', 'inv', 'med', 'nat', 'prc',
@@ -669,6 +707,8 @@ class EnhancementSuite {
         });
     }
 
+    // MACRO PARSING
+
     /**
      * Parse message content for custom macro syntax
      * @param content
@@ -678,7 +718,7 @@ class EnhancementSuite {
      */
     parseMessageContent(content, actor, toolTips = true) {
         return new Promise((resolve, reject) => {
-            this.parsePrompts(duplicate(content)).then((parsed) => {
+            this.parsePrompts(duplicate(content)).then((parsed) => {;
                 let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
                 if (actor) {
                     if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
@@ -732,6 +772,313 @@ class EnhancementSuite {
         if ( chatData["roll"] ) chatData["roll"].toMessage();
         else ChatMessage.create(chatData, true);
     }
+
+    /**
+     * Parse references to named rolls
+     * @param message
+     * @param parser
+     * @returns {String} - parsed message
+     */
+    parseRollReferences(message, parser) {
+        const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
+        const m = message.match(/@{([^\|}]+)(\|([^\|}]+))?(\|(([^\|}]+(\|)?)+))?}/i);
+        if (!m) {
+            return message;
+        } else {
+            const id = m[1];
+            const print = m[3] || 'result';
+            const options = (m[5] || '').split('|');
+
+            // console.log(id, print, options);
+
+            if (id.length > 0) {
+                const rollKey = rolls.find(key => id+'_ref');
+                if (rollKey) {
+                    const roll = duplicate(parser[id+'_ref']);
+                    if (print.trim() === 'result') {
+                        message = message.replace(m[0], roll.result);
+                    } else if (print.trim() === 'crit') {
+                        if (options.length === 2 && !isNaN(parseInt(options[0]))) {
+                            const die = roll.rolls[parseInt(options[0]) - 1];
+                            let critRange = die.sides;
+                            if (!isNaN(parseInt(options[1]))) {
+                                critRange = parseInt(options[1]);
+                            }
+                            if (die ? die.total >= critRange : false) {
+                                message = message.replace(m[0], print);
+                            } else {
+                                message = message.replace(m[0], '');
+                            }
+                        } else {
+                            message = message.replace(m[0], '');
+                        }
+                    } else if (print.trim() === 'fumble') {
+                        if (options.length === 1 && !isNaN(parseInt(options[0]))) {
+                            const die = roll.rolls[parseInt(options[0]) - 1];
+                            if (die ? die.total === 1 : false) {
+                                message = message.replace(m[0], print);
+                            } else {
+                                message = message.replace(m[0], '');
+                            }
+                        } else {
+                            message = message.replace(m[0], '');
+                        }
+                    } else {
+                        message = message.replace(m[0], '');
+                    }
+                }
+            }
+
+            return this.parseRollReferences(message, parser);
+        }
+    }
+
+    /**
+     * Parses a message for input requests. Prompt tags with the same query will only prompt once and use the same value each additional time the query is requested.
+     * @param message - message to parse
+     * @returns {String} - parsed message
+     *
+     * @example <caption>Text input example</caption>
+     * // default value is an empty string if omitted
+     * ?{Query|default value (optional)}
+     *
+     * @example <caption>Dropdown example?</caption>
+     * ?{Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+     * ?{[list]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+     *
+     * @example <caption>Radio button example</caption>
+     * ?{[radio]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+     *
+     * @example <caption>Checkbox examples</caption>
+     * // Selected options will be printed out separated by the delimiter of choice (default ", ")
+     * ?{[checkbox|delimiter]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
+     *
+     * // Selected options can be referenced additional times with the following.
+     * // If option was not selected, this tag will be replaced with an empty string.
+     * ?{:option 1 label}
+     *
+     * @example <caption>Repeating a query to get the same value multiple times</caption>
+     * ?{Query} // prompts for a text input
+     * ?{Query} // identical query retrieves original response
+     */
+    parsePrompts(message) {
+        return new Promise((resolve, reject) => {
+            this.parsePromptTags(message, resolve);
+        });
+    }
+
+    /**
+     * @param {String} message - the message to be parsed
+     * @param {*} resolve - the resolve callback for the promise
+     * @param {Object} parsed - previously parsed queries
+     */
+    parsePromptTags(message, resolve, parsed = {}) {
+        // const rgx = "\\?{(?!:)(\\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\\|([^\\]]+)?)?\\])?(?<query>[^\\|}]+)\\|?(?<list>(([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}"
+        const rgx = "\\?{(?!:)(\\[(list|checkbox|radio)(\\|([^\\]]+)?)?\\])?([^\\|}]+)\\|?((([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(([^{}]|{{[^}]+}})+)?}"
+        const p = message.match(new RegExp(rgx, 'i'));
+        console.log(p);
+        if (!p) {
+            game.settings.set(game.data.system.name, 'promptOptionsMemory', JSON.stringify(this.optMemory));
+            resolve({message: message, references: parsed});
+        } else {
+            const tag = p[0];
+
+            if(!this.optMemory[tag]) this.optMemory[tag] = {};
+
+            const listType = p[2] || 'list';
+            const query = p[5].trim();
+            const list = p[6];
+            const defaultValue = p[11];
+            const optionDelimiter = (p[4] || '|, ').substr(1);
+
+            if (list) {
+                let html = '<p>'+query+'</p>';
+                let inputTag = '';
+                if (listType === 'list') {
+                    inputTag = '.list-prompt[query="'+query.replace(/"/g, '\\"')+'"]';
+
+                    html += '<p><select class="list-prompt" query="'+query.replace(/"/g, '\\"')+'">';
+                    list.split('|').forEach((listItem) => {
+                        const parts = listItem.split(',');
+                        const liLabel = parts[0].trim();
+                        const selected = this.optMemory[tag].value === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
+                        html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(selected ? 'selected': '')+'>'+parts[0].trim()+'</option>';
+                    });
+                    html += '</select></p>';
+                } else if (listType === 'checkbox' || listType === 'radio') {
+                    inputTag = '.list-prompt';
+
+                    html += '<form class="list-prompt">';
+                    list.split('|').forEach((listItem) => {
+                        const parts = listItem.split(',');
+                        const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
+                        const checked = this.optMemory[tag][liLabel] === parts.slice(1).join(',');
+                        html += '<p><label><input type="'+listType+'" name="'+liLabel+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(checked ? 'checked': '')+' /> '+parts[0].trim()+'</label></p>'
+                    });
+                    html += '</form>';
+                }
+
+                if (parsed[query]) {
+                    // Use previous input for repeated queries and selected options
+                    this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
+                } else {
+                    new Dialog({
+                        title: "Macro Configuration",
+                        content: html,
+                        buttons: {
+                            "ok": {
+                                icon: '',
+                                label: "OK",
+                                callback: () => {
+                                    if (listType === 'list') {
+                                        const inputLabel = $(inputTag+' option:selected').html();
+                                        const inputValue = $(inputTag+' option:selected').val();
+                                        this.optMemory[tag].value = inputValue;
+                                        parsed[inputLabel] = inputValue.split(',');
+                                        parsed[query] = [inputValue.split(',')[0]];
+                                        this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
+                                    } else if (listType === 'checkbox' || listType === 'radio') {
+                                        const selected = [];
+                                        list.split('|').forEach((listItem) => {
+                                            const parts = listItem.split(',');
+                                            const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
+                                            if(listType === 'checkbox') delete this.optMemory[tag][liLabel];
+                                        });
+                                        $(inputTag).serializeArray().forEach(item => {
+                                            selected.push(item.value.split(',')[0]);
+                                            parsed[item.name] = item.value.split(',');
+                                            this.optMemory[tag][item.name] = item.value;
+                                        });
+                                        const input = selected.join(optionDelimiter);
+                                        parsed[query] = [input];
+                                        this.parsePromptTags(message.replace(tag, input), resolve, parsed);
+                                    }
+                                }
+                            }
+                        }
+                    }).render(true);
+                }
+            } else {
+                const input = parsed[query] || prompt(query, defaultValue != null ? defaultValue.trim() : '');
+                parsed[query] = [input];
+                this.parsePromptTags(message.replace(tag, input || ''), resolve, parsed);
+            }
+        }
+    }
+
+    /**
+     * Parse references to selected prompt options
+     * @param message
+     * @param parsed
+     * @returns {String} - parsed message
+     */
+    parsePromptOptionReferences(message, parsed) {
+        // const p = message.match(new RegExp("\\?{:(?<query>[^\\|}]+)\\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}", "i"));
+        const p = message.match(new RegExp("\\?{:([^\\|}]+)\\|?(([^{}]|{{[^}]+}})+)?}", "i"));
+        if (!p) {
+            return message;
+        } else {
+            const tag = p[0];
+            const query = p[1].trim();
+            const defaultValue = p[3] || '1';
+
+            if (parsed[query]) {
+                // Use previous input for repeated queries and selected options
+                let defaultParsed = 0;
+                if (!isNaN(parseInt(defaultValue) || '1')) {
+                    defaultParsed = parseInt(defaultValue) - 1;
+                }
+                return this.parsePromptOptionReferences(message.replace(tag, parsed[query][defaultParsed]), parsed);
+            } else {
+                // This is a reference to a selection option, but the option was not selected. Replace with an empty string.
+                return this.parsePromptOptionReferences(message.replace(tag, ''), parsed);
+            }
+        }
+    }
+
+    /**
+     * Parse actor data in a chat message
+     * @param {String} message - message to be parsed
+     * @param {Object} actor - an Actor5e entity
+     * @returns {String} - parsed chat message
+     *
+     * @example
+     * // Some examples of actor data include:
+     * {{name}}
+     * {{level}}
+     * {{class1}}
+     * {{class1.subclass}}
+     *
+     * @see Visit the [Github repository]{@link https://github.com/sillvva/foundry-vtt-modules/tree/master/fvtt-enhancement-suite} for all options
+     */
+    parseActor5eData(message, actor) {
+        const actorInfo = this._getActorDataPieces(actor);
+        let messageTags = message.match(new RegExp("{{([^}]*)}}", "gi"));
+        if (!messageTags) return message;
+        messageTags.forEach((tag) => {
+            let tagName = tag.replace(/{{|}}/g,'');
+            if (!actorInfo.find(info => info.name === tagName)) return;
+            message = message.replace(tag, actorInfo.find(info => info.name === tagName).value);
+        });
+        return message;
+    }
+
+    /**
+     * Take actor data and return name/value pairs that can be parsed from a macro
+     * @param {Object} actor - the Actor entity
+     * @returns {Object} - an amended array of name/value pairs
+     * @private
+     */
+    _getActorDataPieces(actor) {
+        let actorInfo = duplicate(this._parseActorSubdata(actor.data.data, 'data'));
+        actorInfo.push({ name: 'name', value: actor.data.name });
+        actorInfo = actorInfo.map(field => {
+            field.name = field.name.replace(/data\.((details|attributes|resources|spells|traits|abilities)\.)?|\.value/gi, '');
+            if (CONFIG.EnhancementSuite.actorDataReplacements[field.name]) {
+                field.name = CONFIG.EnhancementSuite.actorDataReplacements[field.name];
+            }
+            return field;
+        }).filter(field => {
+            return ['biography', 'speed'].indexOf(field.name) < 0 && field.name.indexOf('skills.') < 0;
+        });
+        if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
+            actor.data.items.filter(item => item.type === 'class').forEach((item, i) => {
+                actorInfo.push({ name: 'class'+(i+1), value: item.name });
+                actorInfo.push({ name: 'class'+(i+1)+'.subclass', value: item.data.subclass.value });
+                actorInfo.push({ name: 'class'+(i+1)+'.level', value: item.data.levels.value });
+            });
+        }
+        return actorInfo;
+    }
+
+    /**
+     * Iterate through the actor data to get name/value pairs
+     * @param {Object | String} data - actor data being looped through
+     * @param key
+     * @returns {Object} - an array of name/value pairs
+     * @private
+     */
+    _parseActorSubdata(data, key) {
+        if (typeof data === 'object' && data != null) {
+            let info = [];
+            Object.keys(data).forEach(nextkey => {
+                if (typeof data[nextkey] !== 'object' && ['value', 'max', 'mod', 'save'].indexOf(nextkey) < 0) return;
+                let subdata = this._parseActorSubdata(data[nextkey], key+'.'+nextkey);
+                if (subdata.hasOwnProperty('name')) {
+                    info.push(subdata);
+                }
+                else {
+                    info = info.concat(subdata);
+                }
+            });
+            return info;
+        }
+        else {
+            return { name: key, value: data };
+        }
+    }
+
+    // DAMAGE CARD PARSING
 
     /**
      * Apply damage/healing to selected tokens
@@ -878,305 +1225,123 @@ class EnhancementSuite {
         }
     }
 
+    // IMPORT/EXPORT
+
     /**
-     * Parse references to named rolls
-     * @param message
-     * @param parser
-     * @returns {String} - parsed message
+     * Get actor and macro data. Export them together
+     * @param actor
      */
-    parseRollReferences(message, parser) {
-        const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
-        const m = message.match(/@{(?<id>[^\|}]+)(\|(?<print>[^\|}]+))?(\|(?<options>([^\|}]+(\|)?)+))?}/i);
-        if (!m) {
-            return message;
-        } else {
-            const id = m.groups.id;
-            const print = m.groups.print || 'result';
-            const options = (m.groups.options || '').split('|');
+    exportActor(actor) {
+        const data = this._parseActorEntity(actor.data, 'data');
+        let actorEntity = {};
+        let tokenData = {};
+        for(let [key, val] of Object.entries(data)) {
+            if(key.match(/permission\.|folder|_id/)) continue;
+            if(key.match(/token\./)) {
+                tokenData[key.replace('token.', '')] = val;
+            } else {
+                actorEntity[key] = val;
+            }
+        }
 
-            // console.log(id, print, options);
+        let actorData = {
+            actor: actorEntity,
+            token: tokenData,
+            macros: this.macros.filter(macro => macro.actor.id === actor._id || macro.actor === actor._id).map(macro => {
+                macro.actor = { id: actor._id, name: actor.data.name };
+                return macro;
+            })
+        };
 
-            if (id.length > 0) {
-                const rollKey = rolls.find(key => id+'_ref');
-                if (rollKey) {
-                    const roll = duplicate(parser[id+'_ref']);
-                    if (print.trim() === 'result') {
-                        message = message.replace(m[0], roll.result);
-                    } else if (print.trim() === 'crit') {
-                        if (options.length === 2 && !isNaN(parseInt(options[0]))) {
-                            const die = roll.rolls[parseInt(options[0]) - 1];
-                            let critRange = die.sides;
-                            if (!isNaN(parseInt(options[1]))) {
-                                critRange = parseInt(options[1]);
-                            }
-                            if (die ? die.total >= critRange : false) {
-                                message = message.replace(m[0], print);
-                            } else {
-                                message = message.replace(m[0], '');
-                            }
-                        } else {
-                            message = message.replace(m[0], '');
-                        }
-                    } else if (print.trim() === 'fumble') {
-                        if (options.length === 1 && !isNaN(parseInt(options[0]))) {
-                            const die = roll.rolls[parseInt(options[0]) - 1];
-                            if (die ? die.total === 1 : false) {
-                                message = message.replace(m[0], print);
-                            } else {
-                                message = message.replace(m[0], '');
-                            }
-                        } else {
-                            message = message.replace(m[0], '');
-                        }
-                    } else {
-                        message = message.replace(m[0], '');
+        const blob = new Blob([JSON.stringify(actorData)], { type: "application/json;charset=utf-8" });
+        const fileURL = URL.createObjectURL(blob);
+        const win = window.open();
+        const element = win.document.createElement('a');
+        $(element)
+            .attr('href', fileURL)
+            .attr('download', actor.data.name.replace(/[^_\-a-z0-9 ]/gi, '')+'.json');
+        win.document.body.appendChild(element);
+        element.click();
+        setTimeout(() => {win.close();}, 500);
+    }
+
+    /**
+     * Import .json file to actor
+     * @param actor
+     * @param data
+     */
+    importActor(actor, data) {
+        if(!data.actor) throw "Invalid data imported";
+
+        const actorObj = {};
+        const items = [];
+        for (let [key, val] of Object.entries(data.actor)) {
+            if (key.substr(0, 5) === 'items') {
+                let iKey = key.replace('items.', '').split('.');
+                const i = parseInt(iKey[0]);
+                if (!items[i]) {
+                    items[i] = {};
+                }
+                iKey = iKey.splice(1);
+                iKey.reduce((t, e) => {
+                    if (e === iKey.slice(-1)[0]) {
+                        t[e] = val;
+                    } else if (!t[e]) {
+                        t[e] = {};
                     }
-                }
-            }
-
-            return this.parseRollReferences(message, parser);
-        }
-    }
-
-    /**
-     * Parses a message for input requests. Prompt tags with the same query will only prompt once and use the same value each additional time the query is requested.
-     * @param message - message to parse
-     * @returns {String} - parsed message
-     *
-     * @example <caption>Text input example</caption>
-     * // default value is an empty string if omitted
-     * ?{Query|default value (optional)}
-     *
-     * @example <caption>Dropdown example?</caption>
-     * ?{Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     * ?{[list]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     *
-     * @example <caption>Radio button example</caption>
-     * ?{[radio]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     *
-     * @example <caption>Checkbox examples</caption>
-     * // Selected options will be printed out separated by the delimiter of choice (default ", ")
-     * ?{[checkbox|delimiter]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     *
-     * // Selected options can be referenced additional times with the following.
-     * // If option was not selected, this tag will be replaced with an empty string.
-     * ?{:option 1 label}
-     *
-     * @example <caption>Repeating a query to get the same value multiple times</caption>
-     * ?{Query} // prompts for a text input
-     * ?{Query} // identical query retrieves original response
-     */
-    parsePrompts(message) {
-        return new Promise((resolve, reject) => {
-            this.parsePromptTags(message, resolve);
-        });
-    }
-
-    /**
-     * @param {String} message - the message to be parsed
-     * @param {*} resolve - the resolve callback for the promise
-     * @param {Object} parsed - previously parsed queries
-     */
-    parsePromptTags(message, resolve, parsed = {}) {
-        const rgx = "\\?{(?!:)(\\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\\|([^\\]]+)?)?\\])?(?<query>[^\\|}]+)\\|?(?<list>(([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}"
-        const p = message.match(new RegExp(rgx, 'i'));
-        if (!p) {
-            game.settings.set(game.data.system.name, 'promptOptionsMemory', JSON.stringify(this.optMemory));
-            resolve({message: message, references: parsed});
-        } else {
-            const tag = p[0];
-
-            if(!this.optMemory[tag]) this.optMemory[tag] = {};
-
-            const listType = p.groups.listType || 'list';
-            const query = p.groups.query.trim();
-            const list = p.groups.list;
-            const defaultValue = p.groups.defaultValue;
-            const optionDelimiter = (p.groups.optionDelimiter || '|, ').substr(1);
-
-            if (list) {
-                let html = '<p>'+query+'</p>';
-                let inputTag = '';
-                if (listType === 'list') {
-                    inputTag = '.list-prompt[query="'+query.replace(/"/g, '\\"')+'"]';
-
-                    html += '<p><select class="list-prompt" query="'+query.replace(/"/g, '\\"')+'">';
-                    list.split('|').forEach((listItem) => {
-                        const parts = listItem.split(',');
-                        const liLabel = parts[0].trim();
-                        const selected = this.optMemory[tag].value === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
-                        html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(selected ? 'selected': '')+'>'+parts[0].trim()+'</option>';
-                    });
-                    html += '</select></p>';
-                } else if (listType === 'checkbox' || listType === 'radio') {
-                    inputTag = '.list-prompt';
-
-                    html += '<form class="list-prompt">';
-                    list.split('|').forEach((listItem) => {
-                        const parts = listItem.split(',');
-                        const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
-                        const checked = this.optMemory[tag][liLabel] === parts.slice(1).join(',');
-                        html += '<p><label><input type="'+listType+'" name="'+liLabel+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(checked ? 'checked': '')+' /> '+parts[0].trim()+'</label></p>'
-                    });
-                    html += '</form>';
-                }
-
-                if (parsed[query]) {
-                    // Use previous input for repeated queries and selected options
-                    this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
-                } else {
-                    new Dialog({
-                        title: "Macro Configuration",
-                        content: html,
-                        buttons: {
-                            "ok": {
-                                icon: '',
-                                label: "OK",
-                                callback: () => {
-                                    if (listType === 'list') {
-                                        const inputLabel = $(inputTag+' option:selected').html();
-                                        const inputValue = $(inputTag+' option:selected').val();
-                                        this.optMemory[tag].value = inputValue;
-                                        parsed[inputLabel] = inputValue.split(',');
-                                        parsed[query] = [inputValue.split(',')[0]];
-                                        this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
-                                    } else if (listType === 'checkbox' || listType === 'radio') {
-                                        const selected = [];
-                                        list.split('|').forEach((listItem) => {
-                                            const parts = listItem.split(',');
-                                            const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
-                                            if(listType === 'checkbox') delete this.optMemory[tag][liLabel];
-                                        });
-                                        $(inputTag).serializeArray().forEach(item => {
-                                            selected.push(item.value.split(',')[0]);
-                                            parsed[item.name] = item.value.split(',');
-                                            this.optMemory[tag][item.name] = item.value;
-                                        });
-                                        const input = selected.join(optionDelimiter);
-                                        parsed[query] = [input];
-                                        this.parsePromptTags(message.replace(tag, input), resolve, parsed);
-                                    }
-                                }
-                            }
-                        }
-                    }).render(true);
-                }
+                    return t[e];
+                }, items[i])
             } else {
-                const input = parsed[query] || prompt(query, defaultValue != null ? defaultValue.trim() : '');
-                parsed[query] = [input];
-                this.parsePromptTags(message.replace(tag, input || ''), resolve, parsed);
+                actorObj[key] = val;
             }
         }
+        actor.update(actorObj, true);
+
+        data.token.actorId = actor._id;
+        data.token.effects = [];
+        this._updateActorToken(actor, data.token);
+
+        this.parseItems(actor, items);
+
+        const macros = this.macros.filter(macro => macro.actor.name !== actorObj['name']).concat(data.macros.map(macro => {
+            macro.actor = { id: actor._id, name: actorObj['name'] };
+            return macro;
+        }));
+        game.settings.set(game.data.system.name, 'macros', JSON.stringify(macros));
     }
 
     /**
-     * Parse references to selected prompt options
-     * @param message
-     * @param parsed
-     * @returns {String} - parsed message
-     */
-    parsePromptOptionReferences(message, parsed) {
-        const p = message.match(/\?{:(?<query>[^\|}]+)\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}/i);
-        if (!p) {
-            return message;
-        } else {
-            const tag = p[0];
-            const query = p.groups.query.trim();
-            const defaultValue = p.groups.defaultValue || '1';
-
-            if (parsed[query]) {
-                // Use previous input for repeated queries and selected options
-                let defaultParsed = 0;
-                if (!isNaN(parseInt(defaultValue) || '1')) {
-                    defaultParsed = parseInt(defaultValue) - 1;
-                }
-                return this.parsePromptOptionReferences(message.replace(tag, parsed[query][defaultParsed]), parsed);
-            } else {
-                // This is a reference to a selection option, but the option was not selected. Replace with an empty string.
-                return this.parsePromptOptionReferences(message.replace(tag, ''), parsed);
-            }
-        }
-    }
-
-    /**
-     * Parse actor data in a chat message
-     * @param {String} message - message to be parsed
-     * @param {Object} actor - an Actor5e entity
-     * @returns {String} - parsed chat message
+     * Parse actor items
      *
-     * @example
-     * // Some examples of actor data include:
-     * {{name}}
-     * {{level}}
-     * {{class1}}
-     * {{class1.subclass}}
-     *
-     * @see Visit the [Github repository]{@link https://github.com/sillvva/foundry-vtt-modules/tree/master/fvtt-enhancement-suite} for all options
+     * @param {Object} actorEntity - The Actor5e entity
+     * @param {Number} items - an array of items being added
+     * @param {Number} i - Optional. Leave blank on initial call.
      */
-    parseActor5eData(message, actor) {
-        const actorInfo = this._getActorDataPieces(actor);
-        let messageTags = message.match(new RegExp("{{(?<tags>[^}]*)}}", "gi"));
-        if (!messageTags) return message;
-        messageTags.forEach((tag) => {
-            let tagName = tag.replace(/{{|}}/g,'');
-            if (!actorInfo.find(info => info.name === tagName)) return;
-            message = message.replace(tag, actorInfo.find(info => info.name === tagName).value);
-        });
-        return message;
-    }
+    parseItems(actorEntity, items, i = 0) {
+        if(items == null) return;
+        if(items.length === 0) return;
 
-    /**
-     * Take actor data and return name/value pairs that can be parsed from a macro
-     * @param {Object} actor - the Actor entity
-     * @returns {Object} - an amended array of name/value pairs
-     * @private
-     */
-    _getActorDataPieces(actor) {
-        let actorInfo = duplicate(this._parseActorSubdata(actor.data.data, 'data'));
-        actorInfo.push({ name: 'name', value: actor.data.name });
-        actorInfo = actorInfo.map(field => {
-            field.name = field.name.replace(/data\.((details|attributes|resources|spells|traits|abilities)\.)?|\.value/gi, '');
-            if (CONFIG.EnhancementSuite.actorDataReplacements[field.name]) {
-                field.name = CONFIG.EnhancementSuite.actorDataReplacements[field.name];
-            }
-            return field;
-        }).filter(field => {
-            return ['biography', 'speed'].indexOf(field.name) < 0 && field.name.indexOf('skills.') < 0;
+        let it = actorEntity.data.items.filter(item => {
+            if(item.type === 'class') return item.name === items[i].name;
+            if(item.type === 'weapon') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'equipment') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'backpack') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'consumable') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'tool') return item.data.source.value === items[i].data.source.value;
+            if(item.type === 'spell') return item.data.source.value === items[i].data.source.value;
+            return false;
         });
-        if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
-            actor.data.items.filter(item => item.type === 'class').forEach((item, i) => {
-                actorInfo.push({ name: 'class'+(i+1), value: item.name });
-                actorInfo.push({ name: 'class'+(i+1)+'.subclass', value: item.data.subclass.value });
-                actorInfo.push({ name: 'class'+(i+1)+'.level', value: item.data.levels.value });
-            });
-        }
-        return actorInfo;
-    }
-
-    /**
-     * Iterate through the actor data to get name/value pairs
-     * @param {Object | String} data - actor data being looped through
-     * @param key
-     * @returns {Object} - an array of name/value pairs
-     * @private
-     */
-    _parseActorSubdata(data, key) {
-        if (typeof data === 'object' && data != null) {
-            let info = [];
-            Object.keys(data).forEach(nextkey => {
-                if (typeof data[nextkey] !== 'object' && ['value', 'max', 'mod', 'save'].indexOf(nextkey) < 0) return;
-                let subdata = this._parseActorSubdata(data[nextkey], key+'.'+nextkey);
-                if (subdata.hasOwnProperty('name')) {
-                    info.push(subdata);
-                }
-                else {
-                    info = info.concat(subdata);
-                }
-            });
-            return info;
+        if(it.length > 0) {
+            actorEntity.updateOwnedItem(it, items[i]);
         }
         else {
-            return { name: key, value: data };
+            actorEntity.createOwnedItem(items[i], true);
+        }
+
+        if(items.length > i + 1) {
+            setTimeout(() => {
+                this.parseItems(actorEntity, items, i + 1);
+            }, 100);
         }
     }
 
@@ -1209,6 +1374,36 @@ class EnhancementSuite {
             return { name: key, value: data };
         }
     }
+
+    /**
+     * Update all fields of a linked actor token
+     * @param tokenData {Object}    The new token data
+     */
+    _updateActorToken(actor, tokenData) {
+        if ( !actor ) return;
+        let actorData = {};
+
+        // Only update certain default token fields
+        let update = {};
+        for ( let [k, v] of Object.entries(tokenData) ) {
+            update[k] = v;
+        }
+        actorData['token'] = mergeObject(actor.token, update, {insertKeys: false, inplace: false});
+
+        // Update linked attribute bar values
+        for ( let bar of ["bar1", "bar2"].filter(b => tokenData[b+".attribute"]) ) {
+            let attr = tokenData[bar+'.attribute'];
+            if ( hasProperty(actor.data.data, attr) ) {
+                actorData[`data.${attr}.value`] = tokenData[bar+'.value'];
+                actorData[`data.${attr}.max`] = tokenData[bar+'.max'];
+            }
+        }
+
+        // Update the Actor
+        actor.update(actorData, true);
+    }
+
+    // TEMPLATES
 
     /**
      * Getter for the module templates path
@@ -1292,112 +1487,7 @@ class EnhancementSuite {
         </div>`;
     }
 
-    /**
-     * Get actor and macro data. Export them together
-     * @param actor
-     */
-    exportActor(actor) {
-        const data = this._parseActorEntity(actor.data, 'data');
-        let actorEntity = {};
-        for(let [key, val] of Object.entries(data)) {
-            if(key.match(/permission\.|folder|token\.|_id/)) continue;
-            actorEntity[key] = val;
-        }
-
-        let actorData = {
-            macros: this.macros.filter(macro => macro.actor.id === actor._id || macro.actor === actor._id).map(macro => {
-                macro.actor = { id: actor._id, name: actor.data.name };
-                return macro;
-            }),
-            actor: actorEntity
-        };
-
-        const blob = new Blob([JSON.stringify(actorData)], { type: "application/json;charset=utf-8" });
-        const fileURL = URL.createObjectURL(blob);
-        const win = window.open();
-        const element = win.document.createElement('a');
-        $(element)
-            .attr('href', fileURL)
-            .attr('download', actor.data.name.replace(/[^_\-a-z0-9 ]/gi, '')+'.json');
-        win.document.body.appendChild(element);
-        element.click();
-        win.close();
-    }
-
-    /**
-     * Import .json file to actor
-     * @param actor
-     * @param data
-     */
-    importActor(actor, data) {
-        if(!data.actor && !data.macros) throw "Invalid data imported";
-        const obj = {};
-        const s = {};
-        const items = [];
-        for (let [key, val] of Object.entries(data.actor)) {
-            if(key.substr(0, 5) === 'items') {
-                let iKey = key.replace('items.', '').split('.');
-                const i = parseInt(iKey[0]);
-                if (!items[i]) {
-                    items[i] = {};
-                }
-                iKey = iKey.splice(1);
-                iKey.reduce((t, e) => {
-                    if (e === iKey.slice(-1)[0]) {
-                        t[e] = val;
-                    } else if(!t[e]) {
-                        t[e] = {};
-                    }
-                    return t[e];
-                }, items[i])
-            } else {
-                obj[key] = val;
-            }
-        }
-        actor.update(obj, true);
-        this.parseItems(actor, items);
-
-        const macros = this.macros.filter(macro => macro.actor.name !== obj['name']).concat(data.macros.map(macro => {
-            macro.actor = { id: actor._id, name: obj['name'] };
-            return macro;
-        }));
-        game.settings.set(game.data.system.name, 'macros', JSON.stringify(macros));
-    }
-
-    /**
-     * Parse actor items
-     *
-     * @param {Object} actorEntity - The Actor5e entity
-     * @param {Number} items - an array of items being added
-     * @param {Number} i - Optional. Leave blank on initial call.
-     */
-    parseItems(actorEntity, items, i = 0) {
-        if(items == null) return;
-        if(items.length === 0) return;
-
-        let it = actorEntity.data.items.filter(item => {
-            if(item.type === 'class') return item.name === items[i].name;
-            if(item.type === 'weapon') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'equipment') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'backpack') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'consumable') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'tool') return item.data.source.value === items[i].data.source.value;
-            if(item.type === 'spell') return item.data.source.value === items[i].data.source.value;
-            return false;
-        });
-        if(it.length > 0) {
-            actorEntity.updateOwnedItem(it, items[i]);
-        }
-        else {
-            actorEntity.createOwnedItem(items[i], true);
-        }
-
-        if(items.length > i + 1) {
-            setTimeout(() => {
-                this.parseItems(actorEntity, items, i + 1);
-            }, 100);
-        }
-    }
+    // CLEANING
 
     /**
      * Data structure update for version 0.1.5 to version 0.2.0
@@ -1418,6 +1508,26 @@ class EnhancementSuite {
             game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros));
         }
         return updated;
+    }
+
+    /**
+     * Ensure existing macros actor ids match up with current worlds's actors with same name
+     */
+    _assignMacros(store = true) {
+        this.macros = this.macros.map((macro, mid) => {
+            game.actors.source
+                .filter(a => a.name === macro.actor.name && a._id !== macro.actor.id)
+                .forEach(a => {
+                    if (game.user.isGM || Object.keys(a.permission).find(p => p[0] === game.user.data._id && p[1] === 3)) {
+                        macro.actor.id = a._id;
+                    }
+                });
+            macro.mid = mid;
+            return macro;
+        });
+        if (store) {
+            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros));
+        }
     }
 }
 
