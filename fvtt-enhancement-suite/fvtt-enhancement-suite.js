@@ -876,7 +876,6 @@ class EnhancementSuite {
         // const rgx = "\\?{(?!:)(\\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\\|([^\\]]+)?)?\\])?(?<query>[^\\|}]+)\\|?(?<list>(([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}"
         const rgx = "\\?{(?!:)(\\[(list|checkbox|radio)(\\|([^\\]]+)?)?\\])?([^\\|}]+)\\|?((([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(([^{}]|{{[^}]+}})+)?}"
         const p = message.match(new RegExp(rgx, 'i'));
-        console.log(p);
         if (!p) {
             game.settings.set(game.data.system.name, 'promptOptionsMemory', JSON.stringify(this.optMemory));
             resolve({message: message, references: parsed});
@@ -889,7 +888,7 @@ class EnhancementSuite {
             const query = p[5].trim();
             const list = p[6];
             const defaultValue = p[11];
-            const optionDelimiter = (p[4] || '|, ').substr(1);
+            const optionDelimiter = (p[3] || '|, ').substr(1);
 
             if (list) {
                 let html = '<p>'+query+'</p>';
