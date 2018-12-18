@@ -355,6 +355,27 @@
 }
 
 /**
+ * Feats Configuration
+ */
+.macro-sheet .feats-header, .macro-sheet .feat {
+    display: flex;
+    padding: 5px 0;
+    border-bottom: 1px solid #ccc;
+}
+.macro-sheet .feats-header {
+    font-weight: bold;
+}
+.macro-sheet .feats-header .feat-enable {
+    width: 20px;
+}
+.macro-sheet .feats-header *, .macro-sheet .feat * {
+    flex: 1; text-align: center;
+}
+.macro-sheet .feat-name {
+    flex: 2;
+}
+
+/**
  * Default Roll Parsing
  */
 .damage-card span.normal-roll.crit {
