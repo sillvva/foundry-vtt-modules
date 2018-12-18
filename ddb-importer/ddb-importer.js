@@ -1,6 +1,6 @@
 /**
  * @author Matt DeKok <Sillvva>
- * @version 0.1.5
+ * @version 0.1.6
  */
 
 class BeyondImporter extends Application {
@@ -66,7 +66,7 @@ class BeyondImporter extends Application {
             html.find('.btn-import-data').after(importButton.clone());
 
             // Handle button clicks
-            importButton.click(ev => {
+            html.find('.btn.import-dndbeyond-sheet').click(ev => {
                 ev.preventDefault();
                 this.importDialog({ actor: actor });
             });

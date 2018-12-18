@@ -2,7 +2,7 @@
 	"name": "ddb-importer",
 	"title": "D&D Beyond Character Importer",
 	"description": "This module will allow a player to import their character from D&D Beyond.",
-	"version": "0.1.5",
+	"version": "0.1.6",
 	"author": "Matt DeKok (Sillvva)",
 	"systems": ["dnd5e"],
 	"scripts": ["./ddb-importer.js"],
