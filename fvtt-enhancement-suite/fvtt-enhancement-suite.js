@@ -280,7 +280,7 @@ class EnhancementSuite {
                 weapons: items.filter(item => item.type === 'weapon').length > 0,
                 spells: items.filter(item => item.type === 'spell').length > 0,
                 tools: items.filter(item => item.type === 'tool').length > 0,
-                feat: items.filter(item => item.type === 'feat').length > 0,
+                feats: items.filter(item => item.type === 'feat').length > 0,
                 abilities5e: false,
                 saves5e: false
             },
@@ -324,43 +324,19 @@ class EnhancementSuite {
         if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
             data.hasMacros.abilities5e = true;
             data.macros.abilities = {
-                prompt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false,
-                    str: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'str') || false,
-                    dex: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dex') || false,
-                    con: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'con') || false,
-                    int: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'int') || false,
-                    wis: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'wis') || false,
-                    cha: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'cha') || false,
-                    acr: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'acr') || false,
-                    ani: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ani') || false,
-                    arc: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'arc') || false,
-                    ath: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ath') || false,
-                    dec: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dec') || false,
-                    his: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'his') || false,
-                    ins: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ins') || false,
-                    itm: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'itm') || false,
-                    inv: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'inv') || false,
-                    med: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'med') || false,
-                    nat: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'nat') || false,
-                    prc: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prc') || false,
-                    prf: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prf') || false,
-                    per: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'per') || false,
-                    rel: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'rel') || false,
-                    slt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'slt') || false,
-                    ste: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ste') || false,
-                    sur: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'sur') || false
+                prompt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false
             };
+            Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).forEach(skill => {
+                data.macros.abilities[skill] = macros.find(macro => macro.type === 'ability-check' && macro.subtype === skill) || false;
+            });
 
             data.hasMacros.saves5e = true;
             data.macros.saves = {
-                prompt: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') || false,
-                    str: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'str') || false,
-                    dex: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'dex') || false,
-                    con: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'con') || false,
-                    int: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'int') || false,
-                    wis: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') || false,
-                    cha: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') || false
+                prompt: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') || false
             };
+            Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach(ability => {
+                data.macros.saves[ability] = macros.find(macro => macro.type === 'saving-throw' && macro.subtype === ability) || false;
+            })
 
             data.macros.weapons = data.macros.weapons.map(item => {
                 let toHit = !isNaN(item.data.bonus.value) ? parseInt(item.data.bonus.value || 0) : 0;
@@ -371,7 +347,7 @@ class EnhancementSuite {
             });
 
             data.macros.spells = data.macros.spells.map(item => {
-                item.school = CONFIG.EnhancementSuite.spellSchools[item.data.school.value] || item.data.school.value;
+                item.school = CONFIG.EnhancementSuite.dnd5e.spellSchools[item.data.school.value] || item.data.school.value;
                 return item;
             });
         }
@@ -526,7 +502,7 @@ class EnhancementSuite {
 
                 const tabs = new Tabs(dialog.element.find('.sheet-tabs'), dialog.element.find('.item').get(0).dataset.tab);
 
-                dialog.element.find('.weapon *, .spell *, .tool *').off('click').on('click', (ev) => {
+                dialog.element.find('.weapon *, .spell *, .tool *, .feat *').off('click').on('click', (ev) => {
                     let el = $(ev.target).closest('.item').find('.enable').get(0);
                     el.checked = !el.checked;
                 });
@@ -601,7 +577,7 @@ class EnhancementSuite {
                     });
                 }
 
-                if (game.data.system.name == CONFIG.EnhancementSuite.settings.dnd5e) {
+                if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
                     if (macro.type === 'weapon') {
                         let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
                         let itemId = Number(macro.iid),
@@ -651,11 +627,11 @@ class EnhancementSuite {
                         if (macro.subtype === 'prompt') {
                             const dialog = new Dialog({
                                 title: "Saving Throw",
-                                content: this.constructor._saves5ePromptTemplate
+                                content: this.constructor._savesPromptTemplate(CONFIG.EnhancementSuite.settings.dnd5e)
                             }).render(true);
 
                             setTimeout(() => {
-                                ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
+                                Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach((abl) => {
                                     dialog.element.find('.'+abl).off('click').on('click', () => {
                                         dialog.close();
                                         actor.rollAbilitySave(abl);
@@ -672,19 +648,17 @@ class EnhancementSuite {
                         if (macro.subtype === 'prompt') {
                             const dialog = new Dialog({
                                 title: "Ability Checks",
-                                content: this.constructor._abilities5ePromptTemplate
+                                content: this.constructor._abilitiesPromptTemplate(CONFIG.EnhancementSuite.settings.dnd5e)
                             }, { width: 600 }).render(true);
 
                             setTimeout(() => {
-                                ['str', 'dex', 'con', 'int', 'wis', 'cha'].forEach((abl) => {
+                                Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach((abl) => {
                                     dialog.element.find('.'+abl).off('click').on('click', () => {
                                         dialog.close();
                                         actor.rollAbilityTest(abl);
                                     });
                                 });
-                                ['acr', 'ani', 'arc', 'ath', 'dec', 'his',
-                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
-                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].forEach((skl) => {
+                                Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).forEach((skl) => {
                                     dialog.element.find('.'+skl).off('click').on('click', () => {
                                         dialog.close();
                                         actor.rollSkill(skl);
@@ -692,12 +666,10 @@ class EnhancementSuite {
                                 });
                             }, 20);
                         } else {
-                            if (['str', 'dex', 'con', 'int', 'wis', 'cha'].indexOf(macro.subtype) >= 0) {
+                            if (Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).indexOf(macro.subtype) >= 0) {
                                 actor.rollAbilityTest(macro.subtype);
                             }
-                            if (['acr', 'ani', 'arc', 'ath', 'dec', 'his',
-                                    'ins', 'itm', 'inv', 'med', 'nat', 'prc',
-                                    'prf', 'per', 'rel', 'slt', 'ste', 'sur'].indexOf(macro.subtype) >= 0) {
+                            if (Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).indexOf(macro.subtype) >= 0) {
                                 actor.rollSkill(macro.subtype);
                             }
                         }
@@ -718,7 +690,7 @@ class EnhancementSuite {
      */
     parseMessageContent(content, actor, toolTips = true) {
         return new Promise((resolve, reject) => {
-            this.parsePrompts(duplicate(content)).then((parsed) => {;
+            this.parsePrompts(duplicate(content)).then((parsed) => {
                 let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
                 if (actor) {
                     if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
@@ -1033,8 +1005,10 @@ class EnhancementSuite {
         actorInfo.push({ name: 'name', value: actor.data.name });
         actorInfo = actorInfo.map(field => {
             field.name = field.name.replace(/data\.((details|attributes|resources|spells|traits|abilities)\.)?|\.value/gi, '');
-            if (CONFIG.EnhancementSuite.actorDataReplacements[field.name]) {
-                field.name = CONFIG.EnhancementSuite.actorDataReplacements[field.name];
+            if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
+                if (CONFIG.EnhancementSuite.dnd5e.actorDataReplacements[field.name]) {
+                    field.name = CONFIG.EnhancementSuite.dnd5e.actorDataReplacements[field.name];
+                }
             }
             return field;
         }).filter(field => {
@@ -1081,7 +1055,7 @@ class EnhancementSuite {
 
     /**
      * Apply damage/healing to selected tokens
-     * @param event
+     * @param damageCard
      * @param multiplier
      */
     applyDamage(damageCard, multiplier) {
@@ -1105,7 +1079,7 @@ class EnhancementSuite {
 
     /**
      * Apply damage by type to selected tokens
-     * @param event
+     * @param damageCard
      */
     applyDamageByType(damageCard) {
         let types = this.getTotalDamageByType(damageCard);
@@ -1164,7 +1138,10 @@ class EnhancementSuite {
      * @returns {Array}
      */
     getTotalDamageByType(chatCard) {
-        const rgx = /(\d+) ?(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)?/gi;
+        let rgx = /(\d+) ?(bludgeoning|piercing|slashing)?/gi;
+        if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
+            rgx = /(\d+) ?(acid|bludgeoning|cold|fire|force|lightning|necrotic|piercing|poison|psychic|radiant|slashing|thunder)?/gi;
+        }
         let types = [];
 
         const norm = $(chatCard).find('normaldamage').text().match(rgx);
@@ -1376,6 +1353,7 @@ class EnhancementSuite {
 
     /**
      * Update all fields of a linked actor token
+     * @param actor {Object}
      * @param tokenData {Object}    The new token data
      */
     _updateActorToken(actor, tokenData) {
@@ -1439,14 +1417,11 @@ class EnhancementSuite {
      * Custom saving throw prompt
      * @returns {string}
      */
-    static get _saves5ePromptTemplate() {
+    static _savesPromptTemplate(system) {
         return `<div class="saves-prompt">
-            <button class="str">Strength</button>
-            <button class="dex">Dexterity</button>
-            <button class="con">Constitution</button>
-            <button class="int">Intelligence</button>
-            <button class="wis">Wisdom</button>
-            <button class="cha">Charisma</button>
+            `+Object.entries(CONFIG.EnhancementSuite[system].saves).reduce((t, e) => {
+            return t + '<button class="'+e[0]+'">'+e[1]+'</button>'
+        }, '')+`
         </div>`;
     }
 
@@ -1454,7 +1429,7 @@ class EnhancementSuite {
      * Custom ability check prompt
      * @returns {string}
      */
-    static get _abilities5ePromptTemplate() {
+    static _abilitiesPromptTemplate(system) {
         return `<div class="abilities-prompt">
             <button class="str">Strength</button>
             <button class="dex">Dexterity</button>
@@ -1465,24 +1440,9 @@ class EnhancementSuite {
         </div>
         <hr />
         <div class="abilities-prompt">
-            <button class="acr">Acrobatics</button>
-            <button class="ani">Animal Handling</button>
-            <button class="arc">Arcana</button>
-            <button class="ath">Athletics</button>
-            <button class="dec">Deception</button>
-            <button class="his">History</button>
-            <button class="ins">Insight</button>
-            <button class="itm">Intimidation</button>
-            <button class="inv">Investigation</button>
-            <button class="med">Medicine</button>
-            <button class="nat">Nature</button>
-            <button class="prc">Perception</button>
-            <button class="prf">Performance</button>
-            <button class="per">Persuasion</button>
-            <button class="rel">Religion</button>
-            <button class="slt">Sleight of Hand</button>
-            <button class="ste">Stealth</button>
-            <button class="sur">Survival</button>
+            `+Object.entries(CONFIG.EnhancementSuite[system].skills).reduce((t, e) => {
+            return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
+        }, '')+`
         </div>`;
     }
 
@@ -1535,39 +1495,77 @@ CONFIG.EnhancementSuite = {
         dnd5e: "dnd5e",
         pathfinder: "pathfinder"
     },
-    actorDataReplacements: {
-        'skills.acr.mod': 'acrobatics',
-        'skills.ani.mod': 'animal-handling',
-        'skills.arc.mod': 'arcana',
-        'skills.ath.mod': 'athletics',
-        'skills.dec.mod': 'deception',
-        'skills.his.mod': 'history',
-        'skills.ins.mod': 'insight',
-        'skills.itm.mod': 'intimidation',
-        'skills.inv.mod': 'investigation',
-        'skills.med.mod': 'medicine',
-        'skills.nat.mod': 'nature',
-        'skills.prc.mod': 'perception',
-        'skills.prf.mod': 'performance',
-        'skills.per.mod': 'persuasion',
-        'skills.rel.mod': 'religion',
-        'skills.slt.mod': 'sleight-of-hand',
-        'skills.ste.mod': 'stealth',
-        'skills.sur.mod': 'survival',
-        'di': 'damage-immunities',
-        'dr': 'damage-resistances',
-        'dv': 'damage-vulnerabilities',
-        'ci': 'condition-immunities'
-    },
-    spellSchools: {
-        'abj': 'Abjuration',
-        'con': 'Conjuration',
-        'div': 'Divination',
-        'enc': 'Enchantment',
-        'evo': 'Evocation',
-        'ill': 'Illusion',
-        'nec': 'Necromancy',
-        'trs': 'Transmutation'
+    dnd5e: {
+        abilities: {
+            'str': 'Strength',
+            'dex': 'Dexterity',
+            'con': 'Constitution',
+            'int': 'Intelligence',
+            'wis': 'Wisdom',
+            'cha': 'Charisma'
+        },
+        saves: {
+            'str': 'Strength',
+            'dex': 'Dexterity',
+            'con': 'Constitution',
+            'int': 'Intelligence',
+            'wis': 'Wisdom',
+            'cha': 'Charisma'
+        },
+        skills: {
+            'acr': 'Acrobatics',
+            'ani': 'Animal Handling',
+            'arc': 'Arcana',
+            'ath': 'Athletics',
+            'dec': 'Deception',
+            'his': 'History',
+            'ins': 'Insight',
+            'itm': 'Intimidation',
+            'inv': 'Investigation',
+            'med': 'Medicine',
+            'nat': 'Nature',
+            'prc': 'Perception',
+            'prf': 'Performance',
+            'per': 'Persuasion',
+            'rel': 'Religion',
+            'slt': 'Sleight of Hand',
+            'ste': 'Stealth',
+            'sur': 'Survival'
+        },
+        spellSchools: {
+            'abj': 'Abjuration',
+            'con': 'Conjuration',
+            'div': 'Divination',
+            'enc': 'Enchantment',
+            'evo': 'Evocation',
+            'ill': 'Illusion',
+            'nec': 'Necromancy',
+            'trs': 'Transmutation'
+        },
+        actorDataReplacements: {
+            'skills.acr.mod': 'acrobatics',
+            'skills.ani.mod': 'animal-handling',
+            'skills.arc.mod': 'arcana',
+            'skills.ath.mod': 'athletics',
+            'skills.dec.mod': 'deception',
+            'skills.his.mod': 'history',
+            'skills.ins.mod': 'insight',
+            'skills.itm.mod': 'intimidation',
+            'skills.inv.mod': 'investigation',
+            'skills.med.mod': 'medicine',
+            'skills.nat.mod': 'nature',
+            'skills.prc.mod': 'perception',
+            'skills.prf.mod': 'performance',
+            'skills.per.mod': 'persuasion',
+            'skills.rel.mod': 'religion',
+            'skills.slt.mod': 'sleight-of-hand',
+            'skills.ste.mod': 'stealth',
+            'skills.sur.mod': 'survival',
+            'di': 'damage-immunities',
+            'dr': 'damage-resistances',
+            'dv': 'damage-vulnerabilities',
+            'ci': 'condition-immunities'
+        }
     }
 };
 
