@@ -1,8 +1,16 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.4
+ * @version 0.2.6
  */
+
+class SuiteHooks extends Hooks {
+    static callAllValues(hook, initial, ...args) {
+        if (!hooks.hasOwnProperty(hook)) return;
+        console.log(`${vtt} | Called ${hook} hook`);
+        return hooks[hook].reduce((i, fn) => fn(i, ...args) || i, initial);
+    }
+}
 
 class EnhancementSuite {
 
@@ -17,9 +25,18 @@ class EnhancementSuite {
         this.hookActor5eSheet();
         this.hookActor();
         this.hookChat();
+
+        this.hookParseActorData();
     }
 
-    // HOOKS
+    hookParseActorData() {
+        SuiteHooks.on('parseActorData', (message, actor) => {
+            if (actor && game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
+                message = this.parseActor5eData(message, actor.name ? game.actors.entities.find(a => a.data.name === actor.name) : actor);
+            }
+            return message;
+        })
+    }
 
     /**
      * Hook into the ready call for the VTT application
@@ -141,6 +158,7 @@ class EnhancementSuite {
                 }
             });
             this.actors = duplicate(game.actors.source);
+            this.renderMacroBar();
         });
     }
 
@@ -535,7 +553,10 @@ class EnhancementSuite {
      * Render the macro bar
      */
     renderMacroBar() {
-        if(this.macros.length === 0) return;
+        if(this.macros.length === 0) {
+            $('.macro-bar').remove();
+            return;
+        }
 
         // Ensure existing macros actor ids match up with current worlds's actors with same name
         this._assignMacros(false);
@@ -692,11 +713,7 @@ class EnhancementSuite {
         return new Promise((resolve, reject) => {
             this.parsePrompts(duplicate(content)).then((parsed) => {
                 let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
-                if (actor) {
-                    if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
-                        message = this.parseActor5eData(message, actor.name ? game.actors.entities.find(a => a.data.name === actor.name) : actor);
-                    }
-                }
+                message = SuiteHooks.callAllValues('parseActorData', message, actor);
                 const parser = new InlineDiceParser(message);
                 message = parser.parse(toolTips);
                 message = this.parseRollReferences(message, parser);
