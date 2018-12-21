@@ -1,14 +1,14 @@
-{{#if macroActorsExist}}
-<div class="macro-bar macro-bar-bottom">
-    <nav class="tabs">
-        {{#each macroActors as |macroActor maid|}}
-        <a class="item" data-tab="{{macroActor.id}}">{{macroActor.name}}</a>
+{{#if hasMacros}}
+<div class="macro-bar macro-bar-bottom" id="macro-bar">
+    <nav class="bar-tabs tabs">
+        {{#each tabs as |tab maid|}}
+        <a class="item" data-tab="{{tab.id}}">{{tab.name}}</a>
         {{/each}}
     </nav>
 
-    {{#each macroActors as |macroActor maid|}}
-    <div class="tab" data-tab="{{macroActor.id}}">
-        {{#each macroActor.macros as |macro mid|}}
+    {{#each tabs as |tab maid|}}
+    <div class="tab" data-tab="{{tab.id}}">
+        {{#each tab.macros as |macro mid|}}
         <button data-macro-id="{{macro.mid}}">{{macro.label}}</button>
         {{/each}}
     </div>

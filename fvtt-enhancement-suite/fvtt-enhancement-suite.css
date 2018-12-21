@@ -248,14 +248,14 @@
 .macro-sheet .weapons-header {
     font-weight: bold;
 }
-.macro-sheet .weapons-header .weapon-enable {
-    width: 20px;
-}
 .macro-sheet .weapons-header *, .macro-sheet .weapon * {
     flex: 1; text-align: center;
 }
 .macro-sheet .weapon-name {
-    flex: 2;
+    flex: 2; text-align: left;
+}
+.macro-sheet .weapon-enable {
+    flex: 0 0 20px;
 }
 
 /**
@@ -269,14 +269,14 @@
 .macro-sheet .spells-header {
     font-weight: bold;
 }
-.macro-sheet .spells-header .spell-enable {
-    width: 20px;
-}
 .macro-sheet .spells-header *, .macro-sheet .spell * {
     flex: 1; text-align: center;
 }
 .macro-sheet .spell-name {
-    flex: 2;
+    flex: 2; text-align: left;
+}
+.macro-sheet .spell-enable {
+    flex: 0 0 20px;
 }
 
 /**
@@ -344,14 +344,14 @@
 .macro-sheet .tools-header {
     font-weight: bold;
 }
-.macro-sheet .tools-header .tool-enable {
-    width: 20px;
-}
 .macro-sheet .tools-header *, .macro-sheet .tool * {
     flex: 1; text-align: center;
 }
 .macro-sheet .tool-name {
-    flex: 2;
+    flex: 2; text-align: left;
+}
+.macro-sheet .tool-enable {
+    flex: 0 0 20px;
 }
 
 /**
@@ -366,13 +366,13 @@
     font-weight: bold;
 }
 .macro-sheet .feats-header *, .macro-sheet .feat * {
-    flex: 1;
-}
-.macro-sheet .feat-enable {
-    width: 20px; flex: 0 0 20px !important;
+    flex: 1; text-align: center;
 }
 .macro-sheet .feat-name {
-    flex: 2;
+    flex: 2; text-align: left;
+}
+.macro-sheet .feat-enable {
+    flex: 0 0 20px;
 }
 
 /**

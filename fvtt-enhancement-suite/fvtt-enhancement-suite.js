@@ -1,30 +1,18 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.2.6
+ * @version 0.3.0
  */
-
-class SuiteHooks extends Hooks {
-    static callAllValues(hook, initial, ...args) {
-        if (!hooks.hasOwnProperty(hook)) return;
-        console.log(`${vtt} | Called ${hook} hook`);
-        return hooks[hook].reduce((i, fn) => fn(i, ...args) || i, initial);
-    }
-}
 
 class EnhancementSuite {
 
     constructor() {
-        this.actors = [];
-        this.macros = [];
-        this.actorTabs = new Tabs();
-
         // Register hooks
         this.hookReady();
-        this.hookToolbarReady();
-        this.hookActor5eSheet();
-        this.hookActor();
+        this.hookToolbar();
+        this.hookActorSheet();
         this.hookChat();
+        this.hookMacros();
 
         this.hookParseActorData();
     }
@@ -43,25 +31,8 @@ class EnhancementSuite {
      */
     hookReady() {
         Hooks.on('ready', () => {
-            game.settings.register(game.data.system.name, "macros", {
-                name: "Macros",
-                hint: "Macros for quick access to chat commands",
-                default: "[]",
-                type: String,
-                onChange: macros => {
-                    this.macros = JSON.parse(macros);
-                    this.renderMacroBar();
-                }
-            });
-            game.settings.register(game.data.system.name, "promptOptionsMemory", {
-                name: "Prompt Options Memory",
-                hint: "Memory of previously selected options",
-                default: "{}",
-                type: String,
-                onChange: memory => {
-                    this.optMemory = JSON.parse(memory);
-                }
-            });
+            game.macros = new Macros();
+
             game.settings.register("core", "sheetToolbarCollapsed", {
                 name: "Actor Sheet Toolbar Collapsed",
                 hint: "",
@@ -77,28 +48,14 @@ class EnhancementSuite {
                 }
             });
 
-            this.optMemory = JSON.parse(game.settings.get(game.data.system.name, 'promptOptionsMemory'));
-            this.macros = JSON.parse(game.settings.get(game.data.system.name, "macros"));
             this.toolbarCollapsed = game.settings.get("core", "sheetToolbarCollapsed");
-
-            // Handle update from 0.1.5 to 0.2.0
-            if(!this._update015to020()) { this.renderMacroBar(); }
-
-            // Used to determine actor permissions when actor is deleted.
-            // If actor is not owned, stored macros will be removed.
-            this.actors = duplicate(game.actors.source);
-
-            // Ensure existing macros actor ids match up with current worlds's actors with same name
-            this._assignMacros();
-
-            this.hookCanvasEvents();
         });
     }
 
     /**
      * Hook into the render call for the Actor5eSheet
      */
-    hookActor5eSheet() {
+    hookActorSheet() {
         Hooks.on('renderActor5eSheet', (app, html, data) => {
             if (!data.owner) return;
 
@@ -123,42 +80,16 @@ class EnhancementSuite {
 
             // Macro Configuration Button
             this.addToolbarButton(toolbarBody, 'far fa-keyboard', 'Macros', () => {
-                this.macroDialog(app.actor);
+                new MacroConfig({
+                    scope: 'actor',
+                    actor: app.actor
+                }, {
+                    width: 650
+                }).render(true);
             });
 
             Hooks.call('toolbarReady', toolbarBody, app.actor);
             Hooks.call('toolbar5eReady', toolbarBody, app.actor);
-        });
-    }
-
-    /**
-     * Hook into the render call for the Actor
-     */
-    hookActor() {
-        Hooks.on('createActor', actor => {
-            this.actors = duplicate(game.actors.source);
-        });
-
-        Hooks.on('updateActor', actor => {
-            this.actors = duplicate(game.actors.source);
-            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros
-                .map(macro => {
-                    if (macro.actor.id === actor.data._id) {
-                        macro.actor.name = actor.data.name;
-                    }
-                    return macro;
-                }))
-            );
-        });
-
-        Hooks.on('deleteActor', id => {
-            this.actors.filter(a => a._id === id).forEach(a => {
-                if (!Object.entries(a.permission).find(kv => kv[1] === 3)) {
-                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros.filter(m => m.actor.id !== id)));
-                }
-            });
-            this.actors = duplicate(game.actors.source);
-            this.renderMacroBar();
         });
     }
 
@@ -198,7 +129,7 @@ class EnhancementSuite {
                 if (cTokens.length === 1) {
                     var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
                 }
-                this.parseMessageContent(chatData.content, actor, !chatData.roll).then(content => {
+                game.macros.parse(chatData.content, actor, !chatData.roll).then(content => {
                     if (chatData.roll) {
                         const data = Roll._getActorData();
                         const roll = new Roll(content, data);
@@ -215,7 +146,7 @@ class EnhancementSuite {
     /**
      * Hook into the render call for the Toolbar
      */
-    hookToolbarReady() {
+    hookToolbar() {
         Hooks.on('toolbarReady', (toolbar, actor) => {
             // Export Button
             this.addToolbarButton(toolbar, 'fas fa-download', 'Export Data', () => {
@@ -245,13 +176,625 @@ class EnhancementSuite {
     }
 
     /**
-     * Hook into the canvas events
+     * Hook into the Macro system
      */
-    hookCanvasEvents() {
-        canvas.stage.on('mouseup', (ev) => {
-            if (!(ev.target instanceof Token)) return;
-            if (canvas.tokens.controlledTokens.length === 1) {
-                this.actorTabs.activateTab($(`.macro-bar .item[data-tab="${canvas.tokens.controlledTokens[0].data.actorId}"]`));
+    hookMacros() {
+        Hooks.on('preRenderMacroConfig', (app, data) => {
+            if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
+                if(data.scope === 'actor') {
+                    const actor = data.actor;
+                    const items = duplicate(actor.data.items);
+                    const weapons = items.filter(item => item.type === 'weapon');
+                    const spells = items.filter(item => item.type === 'spell').sort((a, b) => {
+                        if (parseInt(a.data.level.value) === parseInt(b.data.level.value)) {
+                            return a.name > b.name ? 1 : -1;
+                        }
+                        else {
+                            return parseInt(a.data.level.value) - parseInt(b.data.level.value)
+                        }
+                    });
+                    const tools = items.filter(item => item.type === 'tool');
+                    const feats = items.filter(item => item.type === 'feat');
+
+                    if (weapons.length > 0 || spells.length > 0) {
+                        const weaponEntries = weapons.reduce((output, weapon) => {
+                            weapon.enabled = game.macros.macros.find(macro => macro.type === 'weapon' && parseInt(macro.iid) === weapon.id);
+                            let toHit = !isNaN(weapon.data.bonus.value) ? parseInt(weapon.data.bonus.value || 0) : 0;
+                            toHit += weapon.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
+                            toHit += Math.floor((parseInt(actor.data.data.abilities[weapon.data.ability.value].value) - 10) / 2);
+                            weapon.data.hit = toHit;
+                            weapon.data.damage.value = weapon.data.damage.value.replace('+0','');
+
+                            output += `<div class="item weapon" data-weapon-id="${weapon.id}">
+                                <div class="weapon-enable"><input type="checkbox" class="enable" `+(weapon.enabled ? 'checked' : '')+` /></div>
+                                <div class="weapon-name">${weapon.name}</div>
+                                <div class="weapon-range">${weapon.data.range.value}</div>
+                                <div class="weapon-hit">${weapon.data.hit}</div>
+                                <div class="weapon-damage">${weapon.data.damage.value}</div>
+                            </div>`;
+                            return output;
+                        }, '');
+
+                        const weaponsSection = `<div class="weapons-header">
+                                <div class="weapon-enable">&nbsp;</div>
+                                <div class="weapon-name">Weapon</div>
+                                <div class="weapon-range">Range</div>
+                                <div class="weapon-hit">To Hit</div>
+                                <div class="weapon-damage">Damage</div>
+                            </div>
+                       `+weaponEntries;
+
+                        const spellEntries = spells.reduce((output, spell) => {
+                            spell.enabled = game.macros.macros.find(macro => macro.type === 'spell' && parseInt(macro.iid) === spell.id);
+                            spell.school = CONFIG.EnhancementSuite.dnd5e.spellSchools[spell.data.school.value] || spell.data.school.value;
+
+                            output += `<div class="item spell" data-spell-id="${spell.id}">
+                                <div class="spell-enable"><input type="checkbox" class="enable" `+(spell.enabled ? 'checked' : '')+` /></div>
+                                <div class="spell-name">${spell.name}</div>
+                                <div class="spell-level">${spell.data.level.value}</div>
+                                <div class="spell-school">${spell.school}</div>
+                                <div class="spell-extra">&nbsp;</div>
+                            </div>`;
+                            return output;
+                        }, '');
+
+                        const spellsSection = `<div class="spells-header">
+                                <div class="spell-enable">&nbsp;</div>
+                                <div class="spell-name">Spell</div>
+                                <div class="spell-level">Level</div>
+                                <div class="spell-school">School</div>
+                                <div class="spell-extra">&nbsp;</div>
+                            </div>
+                        `+spellEntries;
+
+                        const tab = {
+                            tabId: 'weaponsSpells',
+                            tabName: 'Weapons & Spells',
+                            flex: 2,
+                            html: `<div class="macros">
+                                `+weaponsSection+`
+                                `+spellsSection+`
+                            </div>`,
+                        };
+
+                        tab.onLoad = (html) => {
+                            html.find('.weapon, .spell').off('click').on('click', (ev) => {
+                                let el = $(ev.target).closest('.item').find('.enable').get(0);
+                                el.checked = !el.checked;
+                            });
+                        };
+
+                        tab.onSave = (html, macros) => {
+                            if (weapons.length > 0) {
+                                // Weapon Macros
+                                const weaponEntries = html.find('.item.weapon');
+                                for(let i = 0; i < weaponEntries.length; i++) {
+                                    if (!$(weaponEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(weaponEntries[i]).find('.weapon-name').html();
+                                    let wid = $(weaponEntries[i]).attr('data-weapon-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(wid),
+                                        type: 'weapon',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
+                            }
+
+                            if (spells.length > 0) {
+                                // Spell Macros
+                                const spellEntries = html.find('.item.spell');
+                                for(let i = 0; i < spellEntries.length; i++) {
+                                    if (!$(spellEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(spellEntries[i]).find('.spell-name').html();
+                                    let sid = $(spellEntries[i]).attr('data-spell-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(sid),
+                                        type: 'spell',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
+                            }
+
+                            return this.sortMacros(macros);
+                        };
+
+                        app.addTab(tab);
+                    }
+
+                    if (tools.length > 0) {
+                        const toolEntries = tools.reduce((output, tool) => {
+                            tool.enabled = game.macros.macros.find(macro => macro.type === 'tool' && parseInt(macro.iid) === tool.id);
+
+                            output += `<div class="item tool" data-tool-id="${tool.id}">
+                                <div class="tool-enable"><input type="checkbox" class="enable" `+(tool.enabled ? 'checked' : '')+` /></div>
+                                <div class="tool-name">${tool.name}</div>
+                            </div>`;
+                            return output;
+                        }, '');
+
+                        const toolsSection = `<div class="tools-header">
+                                <div class="spell-enable">&nbsp;</div>
+                                <div class="spell-name">Tool</div>
+                            </div>
+                        `+toolEntries;
+
+                        const tab = {
+                            tabId: 'tools',
+                            tabName: 'Tools',
+                            html: `<div class="macros">
+                                `+toolsSection+`
+                            </div>`,
+                        };
+
+                        tab.onLoad = (html) => {
+                            html.find('.tool').off('click').on('click', (ev) => {
+                                let el = $(ev.target).closest('.item').find('.enable').get(0);
+                                el.checked = !el.checked;
+                            });
+                        };
+
+                        tab.onSave = (html, macros) => {
+                            if (tools.length > 0) {
+                                // Spell Macros
+                                const toolEntries = html.find('.item.tool');
+                                for(let i = 0; i < toolEntries.length; i++) {
+                                    if (!$(toolEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(toolEntries[i]).find('.tool-name').html();
+                                    let sid = $(toolEntries[i]).attr('data-tool-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(sid),
+                                        type: 'tool',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
+                            }
+                            return this.sortMacros(macros);
+                        };
+
+                        app.addTab(tab);
+                    }
+
+                    if (feats.length > 0) {
+                        const featEntries = feats.reduce((output, feat) => {
+                            feat.enabled = game.macros.macros.find(macro => macro.type === 'feat' && parseInt(macro.iid) === feat.id);
+
+                            output += `<div class="item feat" data-feat-id="${feat.id}">
+                                <div class="feat-enable"><input type="checkbox" class="enable" `+(feat.enabled ? 'checked' : '')+` /></div>
+                                <div class="feat-name">${feat.name}</div>
+                            </div>`;
+                            return output;
+                        }, '');
+
+                        const featsSection = `<div class="feats-header">
+                                <div class="spell-enable">&nbsp;</div>
+                                <div class="spell-name">Tool</div>
+                            </div>
+                        `+featEntries;
+
+                        const tab = {
+                            tabId: 'feats',
+                            tabName: 'Feats',
+                            html: `<div class="macros">
+                                `+featsSection+`
+                            </div>`,
+                        };
+
+                        tab.onLoad = (html) => {
+                            html.find('.feat').off('click').on('click', (ev) => {
+                                let el = $(ev.target).closest('.item').find('.enable').get(0);
+                                el.checked = !el.checked;
+                            });
+                        };
+
+                        tab.onSave = (html, macros) => {
+                            if (feats.length > 0) {
+                                // Spell Macros
+                                const featEntries = html.find('.item.feat');
+                                for(let i = 0; i < featEntries.length; i++) {
+                                    if (!$(featEntries[i]).find('.enable').get(0).checked) continue;
+                                    let label = $(featEntries[i]).find('.feat-name').html();
+                                    let sid = $(featEntries[i]).attr('data-feat-id');
+                                    macros.push({
+                                        mid: macros.length,
+                                        iid: parseInt(sid),
+                                        type: 'feat',
+                                        actor: { id: actor._id, name: actor.data.name },
+                                        label: label
+                                    });
+                                }
+                            }
+                            return this.sortMacros(macros);
+                        };
+
+                        app.addTab(tab);
+                    }
+
+                    if (true) {
+                        let abilitySection = `<div class="ability-toggles">
+                            <div class="enable-all">
+                                <label>
+                                    <input type="checkbox" class="prompt" name="Ability Checks" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') ? 'checked' : '')+`>
+                                    Prompt (Creates one macro that prompts which abililty to use)
+                                </label>
+                            </div>
+                            <div class="enable-one">
+                                <label>
+                                    <input type="checkbox" class="str" name="Strength Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'str') ? 'checked' : '')+`>
+                                    Strength
+                                </label>
+                            </div>
+                            <div class="enable-one">
+                                <label>
+                                    <input type="checkbox" class="dex" name="Dexterity Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dex') ? 'checked' : '')+`>
+                                    Dexterity
+                                </label>
+                            </div>
+                            <div class="enable-one">
+                                <label>
+                                    <input type="checkbox" class="con" name="Constitution Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'con') ? 'checked' : '')+`>
+                                    Constitution
+                                </label>
+                            </div>
+                            <div class="enable-one">
+                                <label>
+                                    <input type="checkbox" class="int" name="Intelligence Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'int') ? 'checked' : '')+`>
+                                    Intelligence
+                                </label>
+                            </div>
+                            <div class="enable-one">
+                                <label>
+                                    <input type="checkbox" class="wis" name="Wisdom check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'wis') ? 'checked' : '')+`>
+                                    Wisdom
+                                </label>
+                            </div>
+                            <div class="enable-one">
+                                <label>
+                                    <input type="checkbox" class="cha" name="Charisma" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'cha') ? 'checked' : '')+`>
+                                    Charisma
+                                </label>
+                            </div>
+                        </div>`;
+
+                        let skillSection = `<div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="acr" name="Acrobatics Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'acr') ? 'checked' : '')+`>
+                                Acrobatics
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="ani" name="Animal Handling Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ani') ? 'checked' : '')+`>
+                                Animal Handling
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="arc" name="Arcana Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'arc') ? 'checked' : '')+`>
+                                Arcana
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="ath" name="Athletics Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ath') ? 'checked' : '')+`>
+                                Athletics
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="dec" name="Deception check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'dec') ? 'checked' : '')+`>
+                                Deception
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="his" name="History" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'his') ? 'checked' : '')+`>
+                                History
+                            </label>
+                        </div>`;
+                        skillSection += `<div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="ins" name="Insight Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ins') ? 'checked' : '')+`>
+                                Insight
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="itm" name="Intimidation Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'itm') ? 'checked' : '')+`>
+                                Intimidation
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="inv" name="Investigation Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'inv') ? 'checked' : '')+`>
+                                Investigation
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="med" name="Medicine Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'med') ? 'checked' : '')+`>
+                                Medicine
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="nat" name="Nature check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'nat') ? 'checked' : '')+`>
+                                Nature
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="prc" name="Perception" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prc') ? 'checked' : '')+`>
+                                Perception
+                            </label>
+                        </div>`;
+                        skillSection += `<div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="prf" name="Performance Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prf') ? 'checked' : '')+`>
+                                Performance
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="per" name="Persuasion Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'per') ? 'checked' : '')+`>
+                                Persuasion
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="rel" name="Religion Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'rel') ? 'checked' : '')+`>
+                                Religion
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="slt" name="Sleight of Hand Check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'slt') ? 'checked' : '')+`>
+                                Sleight of Hand
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="ste" name="Stealth check" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'ste') ? 'checked' : '')+`>
+                                Stealth
+                            </label>
+                        </div>
+                        <div class="enable-one">
+                            <label>
+                                <input type="checkbox" class="sur" name="Survival" `+(game.macros.macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'sur') ? 'checked' : '')+`>
+                                Survival
+                            </label>
+                        </div>`;
+
+                        const tab = {
+                            tabId: 'abilityChecks',
+                            tabName: 'Ability Checks',
+                            flex: 2,
+                            html: `<div class="macros">
+                                    `+abilitySection+`
+                                <hr />
+                                <div class="ability-toggles">
+                                    `+skillSection+`
+                                </div>
+                            </div>`,
+                        };
+
+                        tab.onLoad = (html) => {};
+
+                        tab.onSave = (html, macros) => {
+                            // Ability Check Macros
+                            const abilityEntries = html.find('.ability-toggles input[type="checkbox"]');
+                            for(let i = 0; i < abilityEntries.length; i++) {
+                                if (!$(abilityEntries[i]).get(0).checked) continue;
+                                let label = $(abilityEntries[i]).attr('name');
+                                let subtype = $(abilityEntries[i]).attr('class');
+                                macros.push({
+                                    mid: macros.length,
+                                    type: 'ability-check',
+                                    subtype: subtype,
+                                    actor: { id: actor._id, name: actor.data.name },
+                                    label: label
+                                });
+                            }
+                            return this.sortMacros(macros);
+                        };
+
+                        app.addTab(tab);
+                    }
+
+                    if (true) {
+                        const tab = {
+                            tabId: 'savingThrows',
+                            tabName: 'Saving Throws',
+                            flex: 2,
+                            html: `<div class="macros">
+                                <div class="save-toggles">
+                                    <div class="enable-all">
+                                        <label>
+                                            <input type="checkbox" class="prompt" name="Saving Throws" `+(game.macros.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') ? 'checked' : '')+`>
+                                            Prompt (Creates one macro that prompts which abililty to use)
+                                        </label>
+                                    </div>
+                                    <div class="enable-one">
+                                        <label>
+                                            <input type="checkbox" class="str" name="Strength Save" `+(game.macros.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'str') ? 'checked' : '')+`>
+                                            Strength
+                                        </label>
+                                    </div>
+                                    <div class="enable-one">
+                                        <label>
+                                            <input type="checkbox" class="dex" name="Dexterity Save" `+(game.macros.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'dex') ? 'checked' : '')+`>
+                                            Dexterity
+                                        </label>
+                                    </div>
+                                    <div class="enable-one">
+                                        <label>
+                                            <input type="checkbox" class="con" name="Constitution Save" `+(game.macros.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'con') ? 'checked' : '')+`>
+                                            Constitution
+                                        </label>
+                                    </div>
+                                    <div class="enable-one">
+                                        <label>
+                                            <input type="checkbox" class="int" name="Intelligence Save" `+(game.macros.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'int') ? 'checked' : '')+`>
+                                            Intelligence
+                                        </label>
+                                    </div>
+                                    <div class="enable-one">
+                                        <label>
+                                            <input type="checkbox" class="wis" name="Wisdom Save" `+(game.macros.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'wis') ? 'checked' : '')+`>
+                                            Wisdom
+                                        </label>
+                                    </div>
+                                    <div class="enable-one">
+                                        <label>
+                                            <input type="checkbox" class="cha" name="Charisma Save" `+(game.macros.macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'cha') ? 'checked' : '')+`>
+                                            Charisma
+                                        </label>
+                                    </div>
+                                </div>
+                            </div>`,
+                        };
+
+                        tab.onLoad = (html) => {};
+
+                        tab.onSave = (html, macros) => {
+                            // Saving Throw Macros
+                            const saveEntries = html.find('.save-toggles input[type="checkbox"]');
+                            for(let i = 0; i < saveEntries.length; i++) {
+                                if (!$(saveEntries[i]).get(0).checked) continue;
+                                let label = $(saveEntries[i]).attr('name');
+                                let subtype = $(saveEntries[i]).attr('class');
+                                macros.push({
+                                    mid: macros.length,
+                                    type: 'saving-throw',
+                                    subtype: subtype,
+                                    actor: { id: actor._id, name: actor.data.name },
+                                    label: label
+                                });
+                            }
+                            return this.sortMacros(macros);
+                        };
+
+                        app.addTab(tab);
+                    }
+                }
+            }
+        });
+        Hooks.on('triggerMacro', (macro, actor) => {
+            if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
+                if (macro.type === 'weapon') {
+                    if (!actor) { alert('No actor selected'); return; }
+                    let actor = actor.data;
+                    let itemId = Number(macro.iid),
+                        Item = CONFIG.Item.entityClass,
+                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                    game.macros.parse(item.data.data.description.value, actor).then(message => {
+                        item.data.data.description.value = message;
+                        item.roll();
+                    });
+                }
+
+                if (macro.type === 'spell') {
+                    if (!actor) { alert('No actor selected'); return; }
+                    let itemId = Number(macro.iid),
+                        Item = CONFIG.Item.entityClass,
+                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                    game.macros.parse(item.data.data.description.value, actor).then(message => {
+                        item.data.data.description.value = message;
+                        item.roll();
+                    });
+                }
+
+                if (macro.type === 'tool') {
+                    if (!actor) { alert('No actor selected'); return; }
+                    let itemId = Number(macro.iid),
+                        Item = CONFIG.Item.entityClass,
+                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                    game.macros.parse(item.data.data.description.value, actor).then(message => {
+                        item.data.data.description.value = message;
+                        item.roll();
+                    });
+                }
+
+                if (macro.type === 'feat') {
+                    if (!actor) { alert('No actor selected'); return; }
+                    let itemId = Number(macro.iid),
+                        Item = CONFIG.Item.entityClass,
+                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                    game.macros.parse(item.data.data.description.value, actor).then(message => {
+                        item.data.data.description.value = message;
+                        item.roll();
+                    });
+                }
+
+                if (macro.type === 'saving-throw') {
+                    if (!actor) { alert('No actor selected'); return; }
+                    if (macro.subtype === 'prompt') {
+                        const dialog = new Dialog({
+                            title: "Saving Throw",
+                            content: this.constructor._savesPromptTemplate(CONFIG.EnhancementSuite.settings.dnd5e)
+                        }).render(true);
+
+                        setTimeout(() => {
+                            Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach((abl) => {
+                                dialog.element.find('.'+abl).off('click').on('click', () => {
+                                    dialog.close();
+                                    actor.rollAbilitySave(abl);
+                                });
+                            });
+                        }, 10);
+                    } else {
+                        actor.rollAbilitySave(macro.subtype);
+                    }
+                }
+
+                if (macro.type === 'ability-check') {
+                    if (!actor) { alert('No actor selected'); return; }
+                    if (macro.subtype === 'prompt') {
+                        const dialog = new Dialog({
+                            title: "Ability Checks",
+                            content: this.constructor._abilitiesPromptTemplate(CONFIG.EnhancementSuite.settings.dnd5e)
+                        }, { width: 600 }).render(true);
+
+                        setTimeout(() => {
+                            Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach((abl) => {
+                                dialog.element.find('.'+abl).off('click').on('click', () => {
+                                    dialog.close();
+                                    actor.rollAbilityTest(abl);
+                                });
+                            });
+                            Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).forEach((skl) => {
+                                dialog.element.find('.'+skl).off('click').on('click', () => {
+                                    dialog.close();
+                                    actor.rollSkill(skl);
+                                });
+                            });
+                        }, 20);
+                    } else {
+                        if (Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).indexOf(macro.subtype) >= 0) {
+                            actor.rollAbilityTest(macro.subtype);
+                        }
+                        if (Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).indexOf(macro.subtype) >= 0) {
+                            actor.rollSkill(macro.subtype);
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    sortMacros(macros) {
+        const sortOrder = ['weapon', 'spell', 'ability-check', 'saving-throw', 'tool', 'custom'];
+        return macros.sort((a, b) => {
+            if (a.actor.name !== b.actor.name) {
+                return a.actor.name > b.actor.name ? 1 : -1
+            }
+            if (sortOrder.indexOf(a.type) !== sortOrder.indexOf(b.type)) {
+                return sortOrder.indexOf(a.type) > sortOrder.indexOf(b.type) ? 1 : -1;
             }
         });
     }
@@ -278,711 +821,7 @@ class EnhancementSuite {
         return button;
     }
 
-    // MACRO CONFIGURATION
-
-    /**
-     * Render the macro configuration dialog box
-     * @param {Object} actor - actor entity
-     */
-    macroDialog(actor) {
-        if (!this.macros) return;
-        const macros = this.macros.filter(macro => actor.data.name === macro.actor.name);
-        const items = duplicate(actor.data.items);
-
-        // generic (base) macro configuration
-        const data = {
-            actor: actor,
-            system: game.data.system.name,
-            hasMacros: {
-                weaponsSpells: items.filter(item => item.type === 'weapon' || item.type === 'spell').length > 0,
-                weapons: items.filter(item => item.type === 'weapon').length > 0,
-                spells: items.filter(item => item.type === 'spell').length > 0,
-                tools: items.filter(item => item.type === 'tool').length > 0,
-                feats: items.filter(item => item.type === 'feat').length > 0,
-                abilities5e: false,
-                saves5e: false
-            },
-            macros: {
-                weapons: items.filter(item => item.type === 'weapon')
-                    .map(item => {
-                        item.enabled = macros.find(macro => macro.type === 'weapon' && parseInt(macro.iid) === item.id) != null;
-                        item.data.hit = '';
-                        item.data.damage.value = item.data.damage.value.replace('+0','');
-                        return item;
-                    }),
-                spells: items.filter(item => item.type === 'spell')
-                    .sort((a, b) => {
-                        if (parseInt(a.data.level.value) === parseInt(b.data.level.value)) {
-                            return a.name > b.name ? 1 : -1;
-                        }
-                        else {
-                            return parseInt(a.data.level.value) - parseInt(b.data.level.value)
-                        }
-                    })
-                    .map(item => {
-                        item.enabled = macros.find(macro => macro.type === 'spell' && parseInt(macro.iid) === item.id) != null;
-                        item.school = '';
-                        return item;
-                    }),
-                tools: items.filter(item => item.type === 'tool')
-                    .map(item => {
-                        item.enabled = macros.find(macro => macro.type === 'tool' && parseInt(macro.iid) === item.id) != null;
-                        return item;
-                    }),
-                feats: items.filter(item => item.type === 'feat')
-                    .map(item => {
-                        item.enabled = macros.find(macro => macro.type === 'feat' && parseInt(macro.iid) === item.id) != null;
-                        return item;
-                    }),
-                custom: macros.filter(macro => macro.type === 'custom')
-            }
-        };
-
-        // macro configuration for dnd5e
-        if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
-            data.hasMacros.abilities5e = true;
-            data.macros.abilities = {
-                prompt: macros.find(macro => macro.type === 'ability-check' && macro.subtype === 'prompt') || false
-            };
-            Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).forEach(skill => {
-                data.macros.abilities[skill] = macros.find(macro => macro.type === 'ability-check' && macro.subtype === skill) || false;
-            });
-
-            data.hasMacros.saves5e = true;
-            data.macros.saves = {
-                prompt: macros.find(macro => macro.type === 'saving-throw' && macro.subtype === 'prompt') || false
-            };
-            Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach(ability => {
-                data.macros.saves[ability] = macros.find(macro => macro.type === 'saving-throw' && macro.subtype === ability) || false;
-            })
-
-            data.macros.weapons = data.macros.weapons.map(item => {
-                let toHit = !isNaN(item.data.bonus.value) ? parseInt(item.data.bonus.value || 0) : 0;
-                toHit += item.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
-                toHit += Math.floor((parseInt(actor.data.data.abilities[item.data.ability.value].value) - 10) / 2);
-                item.data.hit = toHit;
-                return item;
-            });
-
-            data.macros.spells = data.macros.spells.map(item => {
-                item.school = CONFIG.EnhancementSuite.dnd5e.spellSchools[item.data.school.value] || item.data.school.value;
-                return item;
-            });
-        }
-        renderTemplate(this.constructor._templatePath+'/macros/macro-configuration.html', data).then(html => {
-            const dialog = new Dialog({
-                title: "Macro Configuration",
-                content: html,
-                buttons: {
-                    "import": {
-                        icon: '',
-                        label: "Save",
-                        callback: () => {
-                            let macros = duplicate(this.macros.filter(macro => macro.actor.name !== actor.data.name));
-
-                            if (data.hasMacros.weapons) {
-                                // Weapon Macros
-                                const weaponEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="weapons-spells"] .weapon');
-                                for(let i = 0; i < weaponEntries.length; i++) {
-                                    if (!$(weaponEntries[i]).find('.enable').get(0).checked) continue;
-                                    let label = $(weaponEntries[i]).find('.weapon-name').html();
-                                    let wid = $(weaponEntries[i]).attr('data-weapon-id');
-                                    macros.push({
-                                        mid: macros.length,
-                                        iid: parseInt(wid),
-                                        type: 'weapon',
-                                        actor: { id: actor._id, name: actor.data.name },
-                                        label: label
-                                    });
-                                }
-                            }
-
-                            if (data.hasMacros.spells) {
-                                // Spell Macros
-                                const spellEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="weapons-spells"] .spell');
-                                for(let i = 0; i < spellEntries.length; i++) {
-                                    if (!$(spellEntries[i]).find('.enable').get(0).checked) continue;
-                                    let label = $(spellEntries[i]).find('.spell-name').html();
-                                    let sid = $(spellEntries[i]).attr('data-spell-id');
-                                    macros.push({
-                                        mid: macros.length,
-                                        iid: parseInt(sid),
-                                        type: 'spell',
-                                        actor: { id: actor._id, name: actor.data.name },
-                                        label: label
-                                    });
-                                }
-                            }
-
-                            if (data.hasMacros.abilities5e) {
-                                // Ability Check Macros
-                                const abilityEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="ability-checks"] input[type="checkbox"]');
-                                for(let i = 0; i < abilityEntries.length; i++) {
-                                    if (!$(abilityEntries[i]).get(0).checked) continue;
-                                    let label = $(abilityEntries[i]).attr('name');
-                                    let subtype = $(abilityEntries[i]).attr('class');
-                                    macros.push({
-                                        mid: macros.length,
-                                        type: 'ability-check',
-                                        subtype: subtype,
-                                        actor: { id: actor._id, name: actor.data.name },
-                                        label: label
-                                    });
-                                }
-                            }
-
-                            if (data.hasMacros.saves5e) {
-                                // Saving Throw Macros
-                                const saveEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="saving-throws"] input[type="checkbox"]');
-                                for(let i = 0; i < saveEntries.length; i++) {
-                                    if (!$(saveEntries[i]).get(0).checked) continue;
-                                    let label = $(saveEntries[i]).attr('name');
-                                    let subtype = $(saveEntries[i]).attr('class');
-                                    macros.push({
-                                        mid: macros.length,
-                                        type: 'saving-throw',
-                                        subtype: subtype,
-                                        actor: { id: actor._id, name: actor.data.name },
-                                        label: label
-                                    });
-                                }
-                            }
-
-                            if (data.hasMacros.tools) {
-                                // Tool Macros
-                                const toolEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="tools"] .tool');
-                                for(let i = 0; i < toolEntries.length; i++) {
-                                    if (!$(toolEntries[i]).find('.enable').get(0).checked) continue;
-                                    let label = $(toolEntries[i]).find('.tool-name').html();
-                                    let tid = $(toolEntries[i]).attr('data-tool-id');
-                                    macros.push({
-                                        mid: macros.length,
-                                        iid: parseInt(tid),
-                                        type: 'tool',
-                                        actor: { id: actor._id, name: actor.data.name },
-                                        label: label
-                                    });
-                                }
-                            }
-
-                            if (data.hasMacros.feats) {
-                                // Tool Macros
-                                const featEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="feats"] .feat');
-                                for(let i = 0; i < featEntries.length; i++) {
-                                    if (!$(featEntries[i]).find('.enable').get(0).checked) continue;
-                                    let label = $(featEntries[i]).find('.feat-name').html();
-                                    let tid = $(featEntries[i]).attr('data-feat-id');
-                                    macros.push({
-                                        mid: macros.length,
-                                        iid: parseInt(tid),
-                                        type: 'feat',
-                                        actor: { id: actor._id, name: actor.data.name },
-                                        label: label
-                                    });
-                                }
-                            }
-
-                            // Custom Macros
-                            const macroEntries = $('.macro-sheet[data-actor-id="'+actor._id+'"] [data-tab="custom"] .macro');
-                            for(let i = 0; i < macroEntries.length; i++) {
-                                let label = $(macroEntries[i]).find('[name="label"]').val();
-                                let content = $(macroEntries[i]).find('[name="content"]').val();
-                                if (label.length === 0) continue;
-                                macros.push({
-                                    mid: macros.length,
-                                    cid: i,
-                                    type: 'custom',
-                                    actor: { id: actor._id, name: actor.data.name },
-                                    label: label,
-                                    content: content
-                                });
-                            }
-
-                            game.settings.set(game.data.system.name, "macros", JSON.stringify(macros));
-                        }
-                    },
-                    "cancel": {
-                        icon: '',
-                        label: "Cancel",
-                        callback: () => {}
-                    }
-                }
-            }, {
-                width: 650
-            }).render(true);
-
-            setTimeout(() => {
-                dialog.element.find('.new-custom-macro').off('click').on('click', (ev) => {
-                    ev.preventDefault();
-                    dialog.element.find('.tab[data-tab="custom"] .macros').append(this.constructor._macroItemTemplate);
-                    this.addCustomMacroEventListeners(dialog);
-                });
-
-                const tabs = new Tabs(dialog.element.find('.sheet-tabs'), dialog.element.find('.item').get(0).dataset.tab);
-
-                dialog.element.find('.weapon *, .spell *, .tool *, .feat *').off('click').on('click', (ev) => {
-                    let el = $(ev.target).closest('.item').find('.enable').get(0);
-                    el.checked = !el.checked;
-                });
-
-                this.addCustomMacroEventListeners(dialog);
-            }, 10);
-        });
-    }
-
-    /**
-     * Event listeners that require reloading when certain page elements change
-     * @param {Dialog} dialog - Dialog instance
-     */
-    addCustomMacroEventListeners(dialog) {
-        dialog.element.find('.macro-list-btn.fa-times').off('click').on('click', (ev) => {
-            $(ev.target).closest('.macro').remove();
-        });
-
-        dialog.element.find('.macro-list-btn.fa-edit').off('click').on('click', (ev) => {
-            let macroEl = $(ev.target).closest('.macro');
-            let label = $(macroEl).find('.macro-label input').val();
-            $(macroEl).find('.macro-edit').toggleClass('hide');
-            $(macroEl).find('.macro-list-name').html(label.trim().length > 0 ? label.trim() : 'Unnamed Macro');
-        });
-    }
-
-    // MACRO BAR
-
-    /**
-     * Render the macro bar
-     */
-    renderMacroBar() {
-        if(this.macros.length === 0) {
-            $('.macro-bar').remove();
-            return;
-        }
-
-        // Ensure existing macros actor ids match up with current worlds's actors with same name
-        this._assignMacros(false);
-
-        // Get the macros sorted into actors
-        let macroActors = [];
-        this.macros.forEach(macro => {
-            let m = duplicate(macro);
-            if (!game.actors.entities.find(a => a.data.name === m.actor.name)) return;
-            let mai = macroActors.findIndex(ma => ma.name === m.actor.name);
-            if (mai < 0) {
-                mai = macroActors.length;
-                macroActors.push(Object.assign(m.actor, {macros: []}));
-            }
-            macroActors[mai].macros.push(m);
-        });
-        macroActors = macroActors.sort((a, b) => a.name > b.name ? 1 : -1);
-
-        // Render the macro bar template
-        renderTemplate(this.constructor._templatePath+'/macros/macro-bar.html', {
-            macroActors: macroActors,
-            macroActorsExist: macroActors.length > 0
-        }).then(html => {
-            $('body .macro-bar').remove();
-            const body = $(html);
-            $('body').append(body);
-            if(macroActors.length > 0) {
-                this.actorTabs = new Tabs(body.find('nav.tabs'), macroActors[0].id);
-            }
-
-            $('.macro-bar [data-macro-id]').click((ev) => {
-                const macroId = parseInt($(ev.target).attr('data-macro-id'));
-                const macro = this.macros.find(m => m.mid === macroId);
-
-                if (macro.type === 'custom') {
-                    if (!macro.content) return;
-                    this.parseMessageContent(macro.content, macro.actor).then(message => {
-                        this.createMessage(message);
-                    });
-                }
-
-                if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
-                    if (macro.type === 'weapon') {
-                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
-                        let itemId = Number(macro.iid),
-                            Item = CONFIG.Item.entityClass,
-                            item = new Item(actor.items.find(i => i.id === itemId), actor);;
-                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
-                            item.data.data.description.value = message;
-                            item.roll();
-                        });
-                    }
-
-                    if (macro.type === 'spell') {
-                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name).data;
-                        let itemId = Number(macro.iid),
-                            Item = CONFIG.Item.entityClass,
-                            item = new Item(actor.items.find(i => i.id === itemId), actor);
-                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
-                            item.data.data.description.value = message;
-                            item.roll();
-                        });
-                    }
-
-                    if (macro.type === 'tool') {
-                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
-                        let itemId = Number(macro.iid),
-                            Item = CONFIG.Item.entityClass,
-                            item = new Item(actor.items.find(i => i.id === itemId), actor);
-                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
-                            item.data.data.description.value = message;
-                            item.roll();
-                        });
-                    }
-
-                    if (macro.type === 'feat') {
-                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
-                        let itemId = Number(macro.iid),
-                            Item = CONFIG.Item.entityClass,
-                            item = new Item(actor.items.find(i => i.id === itemId), actor);
-                        this.parseMessageContent(item.data.data.description.value, macro.actor).then(message => {
-                            item.data.data.description.value = message;
-                            item.roll();
-                        });
-                    }
-
-                    if (macro.type === 'saving-throw') {
-                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
-                        if (macro.subtype === 'prompt') {
-                            const dialog = new Dialog({
-                                title: "Saving Throw",
-                                content: this.constructor._savesPromptTemplate(CONFIG.EnhancementSuite.settings.dnd5e)
-                            }).render(true);
-
-                            setTimeout(() => {
-                                Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach((abl) => {
-                                    dialog.element.find('.'+abl).off('click').on('click', () => {
-                                        dialog.close();
-                                        actor.rollAbilitySave(abl);
-                                    });
-                                });
-                            }, 10);
-                        } else {
-                            actor.rollAbilitySave(macro.subtype);
-                        }
-                    }
-
-                    if (macro.type === 'ability-check') {
-                        let actor = game.actors.entities.find(a => a.data.name === macro.actor.name);
-                        if (macro.subtype === 'prompt') {
-                            const dialog = new Dialog({
-                                title: "Ability Checks",
-                                content: this.constructor._abilitiesPromptTemplate(CONFIG.EnhancementSuite.settings.dnd5e)
-                            }, { width: 600 }).render(true);
-
-                            setTimeout(() => {
-                                Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).forEach((abl) => {
-                                    dialog.element.find('.'+abl).off('click').on('click', () => {
-                                        dialog.close();
-                                        actor.rollAbilityTest(abl);
-                                    });
-                                });
-                                Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).forEach((skl) => {
-                                    dialog.element.find('.'+skl).off('click').on('click', () => {
-                                        dialog.close();
-                                        actor.rollSkill(skl);
-                                    });
-                                });
-                            }, 20);
-                        } else {
-                            if (Object.keys(CONFIG.EnhancementSuite.dnd5e.abilities).indexOf(macro.subtype) >= 0) {
-                                actor.rollAbilityTest(macro.subtype);
-                            }
-                            if (Object.keys(CONFIG.EnhancementSuite.dnd5e.skills).indexOf(macro.subtype) >= 0) {
-                                actor.rollSkill(macro.subtype);
-                            }
-                        }
-                    }
-                }
-            })
-        });
-    }
-
-    // MACRO PARSING
-
-    /**
-     * Parse message content for custom macro syntax
-     * @param content
-     * @param actor
-     * @param toolTips
-     * @returns {Promise<any>}
-     */
-    parseMessageContent(content, actor, toolTips = true) {
-        return new Promise((resolve, reject) => {
-            this.parsePrompts(duplicate(content)).then((parsed) => {
-                let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
-                message = SuiteHooks.callAllValues('parseActorData', message, actor);
-                const parser = new InlineDiceParser(message);
-                message = parser.parse(toolTips);
-                message = this.parseRollReferences(message, parser);
-                resolve(message);
-            });
-        });
-    }
-
-    /**
-     * Create chat entry in ChatLog
-     * @param message
-     */
-    createMessage(message) {
-        // Set up chat data
-        const chatData = {
-            user: game.user._id
-        };
-
-        // Parse the message to determine the matching handler
-        let [chatType, rgx] = ChatLog.parse(message);
-        let [type, match] = ChatLog.parse(message);
-        if ( match) chatData['content'] = match[2];
-        else chatData['content'] = message;
-
-        // Handle dice rolls
-        let roll;
-        if ( type === "roll" ) {
-            let data = Roll._getActorData();
-            chatData['roll'] = new Roll(match[2], data);
-        }
-
-        // In-Character or Emote
-        else if ( ["ic", "emote"].includes(type) ) {
-            let alias;
-            if ( game.user.character ) alias = game.user.character.name;
-            else if ( game.user.isGM && canvas.ready ) {
-                let token = canvas.tokens.controlledTokens.find(t => t.actor !== undefined);
-                if ( token ) alias = token.actor.name;
-            }
-            if ( !alias ) return;
-            chatData['alias'] = alias;
-            if ( type === "emote" ) chatData["content"] = `${alias} ${chatData['content']}`;
-        }
-
-        if ( chatData["roll"] ) chatData["roll"].toMessage();
-        else ChatMessage.create(chatData, true);
-    }
-
-    /**
-     * Parse references to named rolls
-     * @param message
-     * @param parser
-     * @returns {String} - parsed message
-     */
-    parseRollReferences(message, parser) {
-        const rolls = Object.keys(parser).filter(key => key.indexOf('_ref') >= 0);
-        const m = message.match(/@{([^\|}]+)(\|([^\|}]+))?(\|(([^\|}]+(\|)?)+))?}/i);
-        if (!m) {
-            return message;
-        } else {
-            const id = m[1];
-            const print = m[3] || 'result';
-            const options = (m[5] || '').split('|');
-
-            // console.log(id, print, options);
-
-            if (id.length > 0) {
-                const rollKey = rolls.find(key => id+'_ref');
-                if (rollKey) {
-                    const roll = duplicate(parser[id+'_ref']);
-                    if (print.trim() === 'result') {
-                        message = message.replace(m[0], roll.result);
-                    } else if (print.trim() === 'crit') {
-                        if (options.length === 2 && !isNaN(parseInt(options[0]))) {
-                            const die = roll.rolls[parseInt(options[0]) - 1];
-                            let critRange = die.sides;
-                            if (!isNaN(parseInt(options[1]))) {
-                                critRange = parseInt(options[1]);
-                            }
-                            if (die ? die.total >= critRange : false) {
-                                message = message.replace(m[0], print);
-                            } else {
-                                message = message.replace(m[0], '');
-                            }
-                        } else {
-                            message = message.replace(m[0], '');
-                        }
-                    } else if (print.trim() === 'fumble') {
-                        if (options.length === 1 && !isNaN(parseInt(options[0]))) {
-                            const die = roll.rolls[parseInt(options[0]) - 1];
-                            if (die ? die.total === 1 : false) {
-                                message = message.replace(m[0], print);
-                            } else {
-                                message = message.replace(m[0], '');
-                            }
-                        } else {
-                            message = message.replace(m[0], '');
-                        }
-                    } else {
-                        message = message.replace(m[0], '');
-                    }
-                }
-            }
-
-            return this.parseRollReferences(message, parser);
-        }
-    }
-
-    /**
-     * Parses a message for input requests. Prompt tags with the same query will only prompt once and use the same value each additional time the query is requested.
-     * @param message - message to parse
-     * @returns {String} - parsed message
-     *
-     * @example <caption>Text input example</caption>
-     * // default value is an empty string if omitted
-     * ?{Query|default value (optional)}
-     *
-     * @example <caption>Dropdown example?</caption>
-     * ?{Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     * ?{[list]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     *
-     * @example <caption>Radio button example</caption>
-     * ?{[radio]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     *
-     * @example <caption>Checkbox examples</caption>
-     * // Selected options will be printed out separated by the delimiter of choice (default ", ")
-     * ?{[checkbox|delimiter]Query|option 1 label,option 1 value|option 2 label,option 2 value|...}
-     *
-     * // Selected options can be referenced additional times with the following.
-     * // If option was not selected, this tag will be replaced with an empty string.
-     * ?{:option 1 label}
-     *
-     * @example <caption>Repeating a query to get the same value multiple times</caption>
-     * ?{Query} // prompts for a text input
-     * ?{Query} // identical query retrieves original response
-     */
-    parsePrompts(message) {
-        return new Promise((resolve, reject) => {
-            this.parsePromptTags(message, resolve);
-        });
-    }
-
-    /**
-     * @param {String} message - the message to be parsed
-     * @param {*} resolve - the resolve callback for the promise
-     * @param {Object} parsed - previously parsed queries
-     */
-    parsePromptTags(message, resolve, parsed = {}) {
-        // const rgx = "\\?{(?!:)(\\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\\|([^\\]]+)?)?\\])?(?<query>[^\\|}]+)\\|?(?<list>(([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}"
-        const rgx = "\\?{(?!:)(\\[(list|checkbox|radio)(\\|([^\\]]+)?)?\\])?([^\\|}]+)\\|?((([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(([^{}]|{{[^}]+}})+)?}"
-        const p = message.match(new RegExp(rgx, 'i'));
-        if (!p) {
-            game.settings.set(game.data.system.name, 'promptOptionsMemory', JSON.stringify(this.optMemory));
-            resolve({message: message, references: parsed});
-        } else {
-            const tag = p[0];
-
-            if(!this.optMemory[tag]) this.optMemory[tag] = {};
-
-            const listType = p[2] || 'list';
-            const query = p[5].trim();
-            const list = p[6];
-            const defaultValue = p[11];
-            const optionDelimiter = (p[3] || '|, ').substr(1);
-
-            if (list) {
-                let html = '<p>'+query+'</p>';
-                let inputTag = '';
-                if (listType === 'list') {
-                    inputTag = '.list-prompt[query="'+query.replace(/"/g, '\\"')+'"]';
-
-                    html += '<p><select class="list-prompt" query="'+query.replace(/"/g, '\\"')+'">';
-                    list.split('|').forEach((listItem) => {
-                        const parts = listItem.split(',');
-                        const liLabel = parts[0].trim();
-                        const selected = this.optMemory[tag].value === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
-                        html += '<option value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(selected ? 'selected': '')+'>'+parts[0].trim()+'</option>';
-                    });
-                    html += '</select></p>';
-                } else if (listType === 'checkbox' || listType === 'radio') {
-                    inputTag = '.list-prompt';
-
-                    html += '<form class="list-prompt">';
-                    list.split('|').forEach((listItem) => {
-                        const parts = listItem.split(',');
-                        const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
-                        const checked = this.optMemory[tag][liLabel] === parts.slice(1).join(',');
-                        html += '<p><label><input type="'+listType+'" name="'+liLabel+'" value="'+parts.slice(1).join(',').trim().replace(/"/g, '\\"')+'" '+(checked ? 'checked': '')+' /> '+parts[0].trim()+'</label></p>'
-                    });
-                    html += '</form>';
-                }
-
-                if (parsed[query]) {
-                    // Use previous input for repeated queries and selected options
-                    this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
-                } else {
-                    new Dialog({
-                        title: "Macro Configuration",
-                        content: html,
-                        buttons: {
-                            "ok": {
-                                icon: '',
-                                label: "OK",
-                                callback: () => {
-                                    if (listType === 'list') {
-                                        const inputLabel = $(inputTag+' option:selected').html();
-                                        const inputValue = $(inputTag+' option:selected').val();
-                                        this.optMemory[tag].value = inputValue;
-                                        parsed[inputLabel] = inputValue.split(',');
-                                        parsed[query] = [inputValue.split(',')[0]];
-                                        this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
-                                    } else if (listType === 'checkbox' || listType === 'radio') {
-                                        const selected = [];
-                                        list.split('|').forEach((listItem) => {
-                                            const parts = listItem.split(',');
-                                            const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
-                                            if(listType === 'checkbox') delete this.optMemory[tag][liLabel];
-                                        });
-                                        $(inputTag).serializeArray().forEach(item => {
-                                            selected.push(item.value.split(',')[0]);
-                                            parsed[item.name] = item.value.split(',');
-                                            this.optMemory[tag][item.name] = item.value;
-                                        });
-                                        const input = selected.join(optionDelimiter);
-                                        parsed[query] = [input];
-                                        this.parsePromptTags(message.replace(tag, input), resolve, parsed);
-                                    }
-                                }
-                            }
-                        }
-                    }).render(true);
-                }
-            } else {
-                const input = parsed[query] || prompt(query, defaultValue != null ? defaultValue.trim() : '');
-                parsed[query] = [input];
-                this.parsePromptTags(message.replace(tag, input || ''), resolve, parsed);
-            }
-        }
-    }
-
-    /**
-     * Parse references to selected prompt options
-     * @param message
-     * @param parsed
-     * @returns {String} - parsed message
-     */
-    parsePromptOptionReferences(message, parsed) {
-        // const p = message.match(new RegExp("\\?{:(?<query>[^\\|}]+)\\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}", "i"));
-        const p = message.match(new RegExp("\\?{:([^\\|}]+)\\|?(([^{}]|{{[^}]+}})+)?}", "i"));
-        if (!p) {
-            return message;
-        } else {
-            const tag = p[0];
-            const query = p[1].trim();
-            const defaultValue = p[3] || '1';
-
-            if (parsed[query]) {
-                // Use previous input for repeated queries and selected options
-                let defaultParsed = 0;
-                if (!isNaN(parseInt(defaultValue) || '1')) {
-                    defaultParsed = parseInt(defaultValue) - 1;
-                }
-                return this.parsePromptOptionReferences(message.replace(tag, parsed[query][defaultParsed]), parsed);
-            } else {
-                // This is a reference to a selection option, but the option was not selected. Replace with an empty string.
-                return this.parsePromptOptionReferences(message.replace(tag, ''), parsed);
-            }
-        }
-    }
+    // SYSTEM MACROS
 
     /**
      * Parse actor data in a chat message
@@ -1000,7 +839,7 @@ class EnhancementSuite {
      * @see Visit the [Github repository]{@link https://github.com/sillvva/foundry-vtt-modules/tree/master/fvtt-enhancement-suite} for all options
      */
     parseActor5eData(message, actor) {
-        const actorInfo = this._getActorDataPieces(actor);
+        const actorInfo = this._getActor5eDataPieces(actor);
         let messageTags = message.match(new RegExp("{{([^}]*)}}", "gi"));
         if (!messageTags) return message;
         messageTags.forEach((tag) => {
@@ -1017,8 +856,8 @@ class EnhancementSuite {
      * @returns {Object} - an amended array of name/value pairs
      * @private
      */
-    _getActorDataPieces(actor) {
-        let actorInfo = duplicate(this._parseActorSubdata(actor.data.data, 'data'));
+    _getActor5eDataPieces(actor) {
+        let actorInfo = duplicate(this._parseActor5eSubdata(actor.data.data, 'data'));
         actorInfo.push({ name: 'name', value: actor.data.name });
         actorInfo = actorInfo.map(field => {
             field.name = field.name.replace(/data\.((details|attributes|resources|spells|traits|abilities)\.)?|\.value/gi, '');
@@ -1048,12 +887,12 @@ class EnhancementSuite {
      * @returns {Object} - an array of name/value pairs
      * @private
      */
-    _parseActorSubdata(data, key) {
+    _parseActor5eSubdata(data, key) {
         if (typeof data === 'object' && data != null) {
             let info = [];
             Object.keys(data).forEach(nextkey => {
                 if (typeof data[nextkey] !== 'object' && ['value', 'max', 'mod', 'save'].indexOf(nextkey) < 0) return;
-                let subdata = this._parseActorSubdata(data[nextkey], key+'.'+nextkey);
+                let subdata = this._parseActor5eSubdata(data[nextkey], key+'.'+nextkey);
                 if (subdata.hasOwnProperty('name')) {
                     info.push(subdata);
                 }
@@ -1407,30 +1246,6 @@ class EnhancementSuite {
     }
 
     /**
-     * Custom macro item template
-     * @returns {string}
-     */
-    static get _macroItemTemplate() {
-        return `<div class="macro">
-            <div class="macro-list">
-                <div class="macro-list-name">
-                    New Macro
-                </div>
-                <a class="macro-list-btn fas fa-edit"></a>
-                <a class="macro-list-btn fas fa-times"></a>
-            </div>
-            <div class="macro-edit">
-                <div class="macro-label">
-                    <input type="text" name="label" placeholder="Macro Name" />
-                </div>
-                <div class="macro-content">
-                    <textarea name="content" rows="8"></textarea>
-                </div>
-            </div>
-        </div>`;
-    }
-
-    /**
      * Custom saving throw prompt
      * @returns {string}
      */
@@ -1448,12 +1263,9 @@ class EnhancementSuite {
      */
     static _abilitiesPromptTemplate(system) {
         return `<div class="abilities-prompt">
-            <button class="str">Strength</button>
-            <button class="dex">Dexterity</button>
-            <button class="con">Constitution</button>
-            <button class="int">Intelligence</button>
-            <button class="wis">Wisdom</button>
-            <button class="cha">Charisma</button>
+            `+Object.entries(CONFIG.EnhancementSuite[system].abilities).reduce((t, e) => {
+                return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
+            }, '')+`
         </div>
         <hr />
         <div class="abilities-prompt">
@@ -1461,49 +1273,6 @@ class EnhancementSuite {
             return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
         }, '')+`
         </div>`;
-    }
-
-    // CLEANING
-
-    /**
-     * Data structure update for version 0.1.5 to version 0.2.0
-     */
-    _update015to020() {
-        let updated = false;
-        this.macros = this.macros.map(macro => {
-            if (typeof macro.actor === 'string') {
-                let actor = game.actors.entities.find(a => a._id === macro.actor);
-                if (actor) {
-                    macro.actor = { id: macro.actor, name: actor.data.name };
-                    updated = true;
-                }
-            }
-            return macro;
-        });
-        if (updated) {
-            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros));
-        }
-        return updated;
-    }
-
-    /**
-     * Ensure existing macros actor ids match up with current worlds's actors with same name
-     */
-    _assignMacros(store = true) {
-        this.macros = this.macros.map((macro, mid) => {
-            game.actors.source
-                .filter(a => a.name === macro.actor.name && a._id !== macro.actor.id)
-                .forEach(a => {
-                    if (game.user.isGM || Object.keys(a.permission).find(p => p[0] === game.user.data._id && p[1] === 3)) {
-                        macro.actor.id = a._id;
-                    }
-                });
-            macro.mid = mid;
-            return macro;
-        });
-        if (store) {
-            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros));
-        }
     }
 }
 
