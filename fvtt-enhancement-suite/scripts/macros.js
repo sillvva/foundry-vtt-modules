@@ -1,10 +1,31 @@
-let macroTemplatePath = 'public/modules/fvtt-enhancement-suite/templates/macros';
-
 class SuiteHooks extends Hooks {
+    
+    // Give hooks an initial value and some data and allow modifications to that value
+    // Use case: hooking 3rd-party macro parsing extensions
+    
     static callAllValues(hook, initial, ...args) {
-        if (!hooks.hasOwnProperty(hook)) return;
+        if (!hooks.hasOwnProperty(hook)) return initial;
         console.log(`${vtt} | Called ${hook} hook`);
-        return hooks[hook].reduce((i, fn) => fn(i, ...args) || i, initial);
+        return hooks[hook].reduce((i, fn) => fn(i, ...args) || i, initial) || initial;
+    }
+}
+
+class SuiteDialog extends Dialog {
+    constructor(data, options) {
+        super(data, options);
+    }
+
+    // The following changes were made to allow handling when dialog is closed by any means
+    // Use case: Prompt macros would otherwise crash script if closed without submission.
+
+    _submit(button, html) {
+        if (button.callback) button.callback(html);
+        this.close(html, true);
+    }
+    
+    close(html = this.element, submitted = false) {
+        if (this.data.close) this.data.close(html, submitted);
+        super.close();
     }
 }
 
@@ -12,14 +33,16 @@ class Macros {
     constructor() {
         this.macros = [];
         this.actors = [];
-        this.actorTabs = new Tabs();
         this.rollReferences = {};
 
         // Register hooks
         this.hookReady();
         this.hookActor();
         this.hookSettings();
+        this.hookChat();
     }
+
+    /* -------------------------------------------- */
 
     // HOOKS
 
@@ -72,7 +95,7 @@ class Macros {
 
         Hooks.on('updateActor', actor => {
             this.actors = duplicate(game.actors.source);
-            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.actorMacros
+            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros
                 .map(macro => {
                     if (macro.actor.id === actor.data._id) {
                         macro.actor.name = actor.data.name;
@@ -85,7 +108,7 @@ class Macros {
         Hooks.on('deleteActor', id => {
             this.actors.filter(a => a._id === id).forEach(a => {
                 if (!Object.entries(a.permission).find(kv => kv[1] === 3)) {
-                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.actorMacros.filter(m => m.actor.id !== id)));
+                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros.filter(m => m.actor.id !== id)));
                 }
             });
             this.actors = duplicate(game.actors.source);
@@ -120,55 +143,40 @@ class Macros {
         });
     }
 
+    /* -------------------------------------------- */
+
+    /**
+     * Hook into the Chat API
+     */
+    hookChat() {
+        Hooks.on('chatMessage', (chatLog, chatData) => {
+            const hasMacro = (chatData.input || chatData.content || '').match(/\{\{[^\}]+\}\}|\[\[[^\]]+\]\]|\?\{[^\}]+\}|@\{[^\}]+\}/);
+            if (hasMacro) {
+                const cTokens = canvas.tokens.controlledTokens;
+                if (cTokens.length === 1) {
+                    var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
+                }
+                this.parseToMessage(chatLog, chatData.input || chatData.content || '', actor);
+                return false;
+            }
+        });
+    }
+
     // SEND MESSAGE
 
     /**
-     * Create chat entry in ChatLog
-     * @param message
-     */
-    createMessage(message) {
-        // Set up chat data
-        const chatData = {
-            user: game.user._id
-        };
-
-        // Parse the message to determine the matching handler
-        let [chatType, rgx] = ChatLog.parse(message);
-        let [type, match] = ChatLog.parse(message);
-        if ( match) chatData['content'] = match[2];
-        else chatData['content'] = message;
-
-        // Handle dice rolls
-        let roll;
-        if ( type === "roll" ) {
-            let data = Roll._getActorData();
-            chatData['roll'] = new Roll(match[2], data);
-        }
-
-        // In-Character or Emote
-        else if ( ["ic", "emote"].includes(type) ) {
-            let alias;
-            if ( game.user.character ) alias = game.user.character.name;
-            else if ( game.user.isGM && canvas.ready ) {
-                let token = canvas.tokens.controlledTokens.find(t => t.actor !== undefined);
-                if ( token ) alias = token.actor.name;
-            }
-            if ( !alias ) return;
-            chatData['alias'] = alias;
-            if ( type === "emote" ) chatData["content"] = `${alias} ${chatData['content']}`;
-        }
-
-        if ( chatData["roll"] ) chatData["roll"].toMessage();
-        else ChatMessage.create(chatData, true);
-    }
-
-    /**
      * Parse a macro and create chat entry in ChatLog
-     * @param message
+     * @param chatLog
+     * @param content
+     * @param actor
      */
-    parseToMessage(content, actor) {
-        this.parse(content, actor, content.indexOf('/roll') === 0).then(message => {
-            this.createMessage(message);
+    parseToMessage(chatLog, content, actor) {
+        this.parse(content, actor, content.indexOf('/(b(lind)?|gm)?r(oll)?') < 0).then(message => {
+            chatLog._prepareMessageData(message).then(chatData => {
+                if ( !chatData ) return;
+                if ( Hooks.call("chatMessage", chatLog, chatData) === false ) return;
+                ChatMessage.create(chatData);
+            });
         });
     }
 
@@ -176,7 +184,6 @@ class Macros {
 
     /**
      * Store macros in memory
-     * @param scope
      * @param macros
      */
     save(macros) {
@@ -185,13 +192,11 @@ class Macros {
 
     /**
      * Store macros in temporary memory
-     * @param scope
      * @param macros
      */
     set(macros) {
-        game.macros.macros = macros;
-        game.macros.renderMacroBar();
-        // game.settings.set(game.data.system.name, 'macros', JSON.stringify(macros));
+        this.macros = macros;
+        this.renderMacroBar();
     }
 
     /* -------------------------------------------- */
@@ -203,16 +208,16 @@ class Macros {
      * @param tooltips
      * @returns {Promise<any>}
      */
-    parse(content, actor, tooltips = false) {
-        return new Promise((resolve, reject) => {
-            this.parsePrompts(duplicate(content)).then((parsed) => {
-                let message = this.parsePromptOptionReferences(parsed.message, parsed.references);
-                message = SuiteHooks.callAllValues('parseActorData', message, actor);
-                message = this.parseRolls(message, tooltips);
-                message = this.parseRollReferences(message);
-                resolve(message);
-            });
-        });
+    async parse(content, actor, tooltips = false) {
+        let message = duplicate(content);
+        message = SuiteHooks.callAllValues('parseMacrosBegin', message, actor);
+        let parsed = await this.parsePrompts(message);
+        message = this.parsePromptOptionReferences(parsed.message, parsed.references);
+        message = SuiteHooks.callAllValues('parseMacrosAfterPrompts', message, actor);
+        message = this.parseRolls(message, tooltips);
+        message = this.parseRollReferences(message);
+        message = SuiteHooks.callAllValues('parseMacrosEnd', message, actor);
+        return message;
     }
 
     /* -------------------------------------------- */
@@ -245,108 +250,150 @@ class Macros {
      * ?{Query} // prompts for a text input
      * ?{Query} // identical query retrieves original response
      */
-    parsePrompts(message) {
-        return new Promise((resolve, reject) => {
-            this.parsePromptTags(message, resolve);
-        });
-    }
-
-    /* -------------------------------------------- */
-
-    /**
-     * @param {String} message - the message to be parsed
-     * @param {*} resolve - the resolve callback for the promise
-     * @param {Object} parsed - previously parsed queries
-     */
-    parsePromptTags(message, resolve, parsed = {}) {
-        // const rgx = "\\?{(?!:)(\\[(?<listType>(list|checkbox|radio))(?<optionDelimiter>\\|([^\\]]+)?)?\\])?(?<query>[^\\|}]+)\\|?(?<list>(([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(?<defaultValue>([^{}]|{{[^}]+}})+)?}"
-        const rgx = "\\?{(?!:)(\\[(list|checkbox|radio)(\\|([^\\]]+)?)?\\])?([^\\|}]+)\\|?((([^,{}\\|]|{{[^}]+}})+,([^\\|{}]|{{[^}]+}})+\\|?)+)?(([^{}]|{{[^}]+}})+)?}"
-        const p = message.match(new RegExp(rgx, 'i'));
+    async parsePrompts(message, parsed = {}) {
+        /*
+        \?\{(?!:)
+        (                                       //1
+            \[(                                 //2     listType
+                list|checkbox|radio
+            )(                                  //3
+                \|(                             //4     optionDelimiter
+                    [^\]]*
+                )?
+            )?\]
+        )?
+        (                                       //5     query
+            (                                   //6
+                [^\|\{\}]                       //      Any non-separator, non-tag character
+                |                               //      or
+                \{\{[^\}]+\}\}                  //      An actor data tag, which uses the same tag characters
+            )+
+        )
+        \|?
+        (                                       //7     list
+            (                                   //8
+                (                               //9
+                    [^,\{\}\|]
+                    |
+                    \{\{[^\}]+\}\}
+                )+(                             //10
+                    ,(                          //11
+                        [^\|\{\}]
+                        |
+                        \{\{[^\}]+\}\}
+                    )+
+                )+\|?
+            )+
+        )?
+        (                                       //12    defaultValue
+            (                                   //13
+                [^\{\}]
+                |
+                \{\{[^\}]+\}\}
+            )+
+        )?\}
+        */
+        const p = message.match(/\?\{(?!:)(\[(list|checkbox|radio)(\|([^\]]*)?)?\])?(([^\|\{\}]|\{\{[^\}]+\}\})+)\|?((([^,\{\}\|]|\{\{[^\}]+\}\})+(,([^\|\{\}]|\{\{[^\}]+\}\})+)+\|?)+)?(([^\{\}]|\{\{[^\}]+\}\})+)?\}/i);
         if (!p) {
+            // No more prompt tags
             game.settings.set('core', 'promptOptionsMemory', JSON.stringify(this.optMemory));
-            resolve({message: message, references: parsed});
+            return {message: message, references: parsed};
         } else {
+            // Prompt tag detected
             const tag = p[0];
 
             if (!this.optMemory[tag]) this.optMemory[tag] = {};
-
+            
+            // Important capturing groups
             const listType = p[2] || 'list';
+            const optionDelimiter = p[3] ? (p[4] || '') : ', ';
             const query = p[5].trim();
-            const list = p[6];
-            const defaultValue = p[11];
-            const optionDelimiter = (p[3] || '|, ').substr(1);
+            const list = p[7];
+            const defaultValue = p[12];
 
+            // List options detected
             if (list) {
-                let html = '<p>' + query + '</p>';
-                let inputTag = '';
-                if (listType === 'list') {
-                    inputTag = '.list-prompt[query="' + query.replace(/"/g, '\\"') + '"]';
-
-                    html += '<p><select class="list-prompt" query="' + query.replace(/"/g, '\\"') + '">';
-                    list.split('|').forEach((listItem) => {
-                        const parts = listItem.split(',');
-                        const liLabel = parts[0].trim();
-                        const selected = this.optMemory[tag].value === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
-                        html += '<option value="' + parts.slice(1).join(',').trim().replace(/"/g, '\\"') + '" ' + (selected ? 'selected' : '') + '>' + parts[0].trim() + '</option>';
-                    });
-                    html += '</select></p>';
-                } else if (listType === 'checkbox' || listType === 'radio') {
-                    inputTag = '.list-prompt';
-
-                    html += '<form class="list-prompt">';
-                    list.split('|').forEach((listItem) => {
-                        const parts = listItem.split(',');
-                        const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
-                        const checked = this.optMemory[tag][liLabel] === parts.slice(1).join(',');
-                        html += '<p><label><input type="' + listType + '" name="' + liLabel + '" value="' + parts.slice(1).join(',').trim().replace(/"/g, '\\"') + '" ' + (checked ? 'checked' : '') + ' /> ' + parts[0].trim() + '</label></p>'
-                    });
-                    html += '</form>';
-                }
-
                 if (parsed[query]) {
                     // Use previous input for repeated queries and selected options
-                    this.parsePromptTags(message.replace(tag, parsed[query]), resolve, parsed);
+                    return await this.parsePrompts(message.replace(tag, parsed[query].join(optionDelimiter)), parsed);
                 } else {
-                    new Dialog({
-                        title: query,
-                        content: html,
-                        buttons: {
-                            "ok": {
-                                icon: '',
-                                label: "OK",
-                                callback: () => {
-                                    if (listType === 'list') {
-                                        const inputLabel = $(inputTag + ' option:selected').html();
-                                        const inputValue = $(inputTag + ' option:selected').val();
-                                        this.optMemory[tag].value = inputValue;
-                                        parsed[inputLabel] = inputValue.split(',');
-                                        parsed[query] = [inputValue.split(',')[0]];
-                                        this.parsePromptTags(message.replace(tag, inputValue.split(',')[0]), resolve, parsed);
-                                    } else if (listType === 'checkbox' || listType === 'radio') {
-                                        const selected = [];
-                                        list.split('|').forEach((listItem) => {
-                                            const parts = listItem.split(',');
-                                            const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
-                                            if (listType === 'checkbox') delete this.optMemory[tag][liLabel];
-                                        });
-                                        $(inputTag).serializeArray().forEach(item => {
-                                            selected.push(item.value.split(',')[0]);
-                                            parsed[item.name] = item.value.split(',');
-                                            this.optMemory[tag][item.name] = item.value;
-                                        });
-                                        const input = selected.join(optionDelimiter);
-                                        parsed[query] = [input];
-                                        this.parsePromptTags(message.replace(tag, input), resolve, parsed);
+                    return await new Promise((resolve, reject) => {
+                        let html = '<p>' + query + '</p>';
+                        let inputTag = '';
+                        if (listType === 'list') {
+                            inputTag = '.list-prompt[query="' + query.replace(/"/g, '\\"') + '"]';
+
+                            html += '<p><select class="list-prompt" query="' + query.replace(/"/g, '\\"') + '">';
+                            list.split('|').forEach((listItem) => {
+                                const parts = listItem.split(',');
+                                const liLabel = parts[0].trim();
+                                const selected = this.optMemory[tag].value === parts.slice(1).join(',').trim().replace(/"/g, '\\"');
+                                const value = parts.slice(1).join(',').trim().replace(/"/g, '\\"');
+                                html += '<option value="' + value + '" ' + (selected ? 'selected' : '') + '>' + parts[0].trim() + '</option>';
+                            });
+                            html += '</select></p>';
+                        } else if (listType === 'checkbox' || listType === 'radio') {
+                            inputTag = '.list-prompt';
+
+                            html += '<form class="list-prompt">';
+                            list.split('|').forEach((listItem) => {
+                                const parts = listItem.split(',');
+                                const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
+                                const checked = this.optMemory[tag][liLabel] === parts.slice(1).join(',');
+                                const value = parts.slice(1).join(',').trim().replace(/"/g, '\\"');
+                                html += '<p><label><input type="' + listType + '" name="' + liLabel + '" value="' + value + '" ' + (checked ? 'checked' : '') + ' /> ' + parts[0].trim() + '</label></p>'
+                            });
+                            html += '</form>';
+                        }
+
+                        new SuiteDialog({
+                            title: query,
+                            content: html,
+                            buttons: {
+                                "ok": {
+                                    icon: '',
+                                    label: "OK",
+                                    callback: () => {
+                                        if (listType === 'list') {
+                                            const inputLabel = $(inputTag + ' option:selected').html();
+                                            const inputValue = $(inputTag + ' option:selected').val();
+                                            this.optMemory[tag].value = inputValue;
+                                            parsed[inputLabel] = inputValue.split(',');
+                                            parsed[query] = [inputValue.split(',')[0]];
+                                            resolve(this.parsePrompts(message.replace(tag, inputValue.split(',')[0]), parsed));
+                                        } else if (listType === 'checkbox' || listType === 'radio') {
+                                            const selected = [];
+                                            list.split('|').forEach((listItem) => {
+                                                const parts = listItem.split(',');
+                                                const liLabel = listType === 'checkbox' ? parts[0].trim().replace(/"/g, '\\"') : query;
+                                                if (listType === 'checkbox') delete this.optMemory[tag][liLabel];
+                                            });
+                                            $(inputTag).serializeArray().forEach(item => {
+                                                selected.push(item.value.split(',')[0]);
+                                                parsed[item.name] = item.value.split(',');
+                                                this.optMemory[tag][item.name] = item.value;
+                                            });
+                                            const input = selected.join(optionDelimiter);
+                                            parsed[query] = [input];
+                                            resolve(this.parsePrompts(message.replace(tag, input), parsed));
+                                        }
                                     }
                                 }
+                            },
+                            close: (html, submitted) => {
+                                if (submitted) return;
+                                parsed[query] = [''];
+                                resolve(this.parsePrompts(message.replace(tag, ''), parsed));
                             }
-                        }
-                    }).render(true);
+                        }).render(true);
+                    }, {
+                        width: 400
+                    });
                 }
             } else {
                 const input = parsed[query] || prompt(query, defaultValue != null ? defaultValue.trim() : '');
                 parsed[query] = [input];
-                this.parsePromptTags(message.replace(tag, input || ''), resolve, parsed);
+                return await this.parsePrompts(message.replace(tag, input || ''), parsed);
             }
         }
     }
@@ -360,8 +407,18 @@ class Macros {
      * @returns {String} - parsed message
      */
     parsePromptOptionReferences(message, parsed) {
-        // const p = message.match(new RegExp("\\?{:(?<query>[^\\|}]+)\\|?(?<defaultValue>([^{}]|{{[^}]+}})+)?}", "i"));
-        const p = message.match(new RegExp("\\?{:([^\\|}]+)\\|?(([^{}]|{{[^}]+}})+)?}", "i"));
+        /*
+        \?\{:(                      //1 query
+            [^\|\}]+
+        )\|?(                       //2
+            (                       //3 defaultValue
+                [^\{\}]
+                |
+                \{\{[^\}]+\}\}
+            )+
+        )?\}
+        */
+        const p = message.match(/\?\{:([^\|\}]+)\|?(([^\{\}]|\{\{[^\}]+\}\})+)?\}/i);
         if (!p) {
             return message;
         } else {
@@ -389,8 +446,9 @@ class Macros {
      * Parses the chat message of dice and math
      * @returns {string} - Returns a parsed chat message
      */
-    parseRolls(message, tooltip = false) {
+    parseRolls(message, tooltips = false) {
         // create message nodes we can parse through
+        // and preserve html
         let output = '<message>' + message
                 .replace(/</g,'_--')
                 .replace(/>/g,'--_')
@@ -402,7 +460,7 @@ class Macros {
         let messageEl = $(output).get(0);
         output = messageEl.childNodes.length === 0 ?
             messageEl.innerHTML :
-            this._parseRolls(messageEl, messageEl.nodeName, tooltip);
+            this._parseRolls(messageEl, messageEl.nodeName, tooltips);
 
         // restore the html code to its original state
         return output
@@ -433,7 +491,7 @@ class Macros {
      * @returns {String} - the parsed chat message
      * @private
      */
-    _parseRolls(xml, nodeName, tooltip) {
+    _parseRolls(xml, nodeName, tooltips) {
         const idRgx = /^(@([^:]+):)/i;
         if (xml.childNodes.length === 1 ? (xml.childNodes[0].nodeName === '#text') : false) {
             const m = xml.innerHTML.match(idRgx);
@@ -452,8 +510,8 @@ class Macros {
                         outVal += add;
                     } else {
                         const parseString = this.constructor._reverseParseRolls('<' + childNodeName + '>' + $(node).get(0).innerHTML + '</' + childNodeName + '>');
-                        if (xml.innerHTML.substr(0, 1) !== '/' && tooltip) {
-                            outVal += '<span title="' + parseString.replace(/"/g, '\\"') + '">' + add + '</span>';
+                        if (xml.innerHTML.substr(0, 1) !== '/' && tooltips) {
+                            outVal += '<span title="' + parseString.replace(/\[\[|\]\]/g, "").replace(/"/g, '\\"') + '">' + add + '</span>';
                         } else {
                             outVal += add;
                         }
@@ -510,8 +568,23 @@ class Macros {
      * @returns {String} - parsed message
      */
     parseRollReferences(message) {
+        /*
+        @\{(                        //1 id
+            [^\|\}]+
+        )(                          //2
+            \|(                     //3 print
+                [^\|\}]+
+            )
+        )?(                         //4
+            \|(                     //5 options
+                (                   //6
+                    [^\|\}]+\|?
+                )+
+            )
+        )?\}
+        */
         const rolls = Object.keys(this.rollReferences).filter(key => key.indexOf('_ref') >= 0);
-        const m = message.match(/@{([^\|}]+)(\|([^\|}]+))?(\|(([^\|}]+(\|)?)+))?}/i);
+        const m = message.match(/@\{([^\|\}]+)(\|([^\|\}]+))?(\|(([^\|\}]+(\|)?)+))?\}/i);
         if (!m) {
             return message;
         } else {
@@ -643,7 +716,7 @@ class MacroConfig extends Application {
     static get defaultOptions() {
         const options = super.defaultOptions;
         options.title = "Macro Configuration";
-        options.template = macroTemplatePath+"/macro-config.html";
+        options.template = CONFIG.Macros.templatePath+CONFIG.Macros.templates.macroConfig;
         options.width = 600;
         return options;
     }
@@ -779,7 +852,9 @@ class MacroConfig extends Application {
      * @param {String} options.tabId - the tab identifier
      * @param {String} options.tabName - the tab name
      * @param {String} options.html - the tab html
-     * @param {String} options.callback - the callback that is processed when the save button is clicked
+     * @param {Number} options.flex - the number of flex columns the tab handle uses
+     * @param {Function} options.onLoad - the callback that is processed when the tab is loaded
+     * @param {Function} options.onSave - the callback that is processed when the save button is clicked
      */
     addTab(options = {}) {
         const {
@@ -787,14 +862,18 @@ class MacroConfig extends Application {
             tabName = null,
             html = null,
             flex = 1,
-            onLoad = (html) => {},
-            onSave = (html) => {}
+            onLoad = (html) => {
+                console.log(`Tab '${tabId}' does not do anything upon loading. This functionality requires that it have a callback registered to the 'onLoad' property.`);
+            },
+            onSave = (html) => {
+                console.log(`Tab '${tabId}' does not do anything upon saving. This functionality requires that it have a callback registered to the 'onSave' property.`);
+            }
         } = options;
 
-        if (!tabId) throw "Tab requires tabId.";
-        if (!tabName) throw "Tab requires tabName.";
-        if (!html) throw "Tab requires html.";
-
+        if (!tabId) throw "Tab requires the 'tabId' property to identify the tab to the script.";
+        if (!tabName) throw "Tab requires the 'tabName' property to identify the tab to the user.";
+        if (!html) throw "Tab requires the 'html' property. This is the content of the tab.";
+        
         this.data.tabs.push({
             id: tabId,
             name: tabName,
@@ -887,7 +966,7 @@ class MacroBar extends Application {
     static get defaultOptions() {
         const options = super.defaultOptions;
         options.id = "macro-bar";
-        options.template = macroTemplatePath+"/macro-bar.html";
+        options.template = CONFIG.Macros.templatePath+CONFIG.Macros.templates.macroBar;
         options.popOut = false;
         return options;
     }
@@ -981,7 +1060,8 @@ class MacroBar extends Application {
             }
 
             if (macro.type === 'custom') {
-                game.macros.parseToMessage(macro.content, actor);
+                console.log(ui.chat);
+                game.macros.parseToMessage(ui.chat, macro.content, actor);
             } else {
                 Hooks.call('triggerMacro', macro, actor);
             }
@@ -996,3 +1076,11 @@ class MacroBar extends Application {
         });
     }
 }
+
+CONFIG.Macros = {
+    templatePath: 'public/modules/fvtt-enhancement-suite/templates/macros',
+    templates: {
+        macroConfig: '/macro-config.html',
+        macroBar: '/macro-bar.html'
+    }
+};

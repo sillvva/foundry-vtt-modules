@@ -218,7 +218,7 @@ class BeyondImporter extends Application {
         obj['data.traits.senses.value'] = this.getSenses(character).join(', ');
 
         // Set Resistances, Immunities, Vulnerabilities
-        const defenses = this.getDefemseAdjustments(character);
+        const defenses = this.getDefenseAdjustments(character);
         obj['data.traits.ci.value'] = defenses.conditionImmunities.join(', ');
         obj['data.traits.di.value'] = defenses.damageImmunities.join(', ');
         obj['data.traits.dr.value'] = defenses.resistances.join(', ');
@@ -422,7 +422,7 @@ class BeyondImporter extends Application {
      *
      * @param {Object} character - Character JSON data string parsed as an object after import
      */
-    getDefemseAdjustments(character) {
+    getDefenseAdjustments(character) {
         let conditionImmunities = [];
         let damageImmunities = [];
         this._getObjects(character.modifiers, 'type', 'immunity').forEach(da => {

@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.0
+ * @version 0.3.1
  */
 
 class EnhancementSuite {
@@ -13,17 +13,6 @@ class EnhancementSuite {
         this.hookActorSheet();
         this.hookChat();
         this.hookMacros();
-
-        this.hookParseActorData();
-    }
-
-    hookParseActorData() {
-        SuiteHooks.on('parseActorData', (message, actor) => {
-            if (actor && game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
-                message = this.parseActor5eData(message, actor.name ? game.actors.entities.find(a => a.data.name === actor.name) : actor);
-            }
-            return message;
-        })
     }
 
     /**
@@ -121,26 +110,6 @@ class EnhancementSuite {
                 }
             });
         });
-
-        Hooks.on('chatMessage', (chatLog, chatData) => {
-            const hasMacro = chatData.content.match(/{{.+}}|\[\[.+\]\]|<<.+>>|\?{.+}|@{.+}/);
-            if (hasMacro) {
-                const cTokens = canvas.tokens.controlledTokens;
-                if (cTokens.length === 1) {
-                    var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
-                }
-                game.macros.parse(chatData.content, actor, !chatData.roll).then(content => {
-                    if (chatData.roll) {
-                        const data = Roll._getActorData();
-                        const roll = new Roll(content, data);
-                        roll.toMessage();
-                    } else {
-                        ChatMessage.create({ user: game.user._id, content: content }, true);
-                    }
-                });
-                return false;
-            }
-        });
     }
 
     /**
@@ -179,6 +148,12 @@ class EnhancementSuite {
      * Hook into the Macro system
      */
     hookMacros() {
+        SuiteHooks.on('parseMacrosAfterPrompts', (message, actor) => {
+            if (actor && game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
+                message = this.parseActor5eData(message, actor.name ? game.actors.entities.find(a => a.data.name === actor.name) : actor);
+            }
+            return message;
+        });
         Hooks.on('preRenderMacroConfig', (app, data) => {
             if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
                 if(data.scope === 'actor') {
@@ -1001,7 +976,6 @@ class EnhancementSuite {
         let types = [];
 
         const norm = $(chatCard).find('normaldamage').text().match(rgx);
-        console.log(chatCard);
         if (norm) {
             norm.forEach((dmg) => {
                 const parts = dmg.split(' ');
@@ -1079,7 +1053,7 @@ class EnhancementSuite {
         let actorData = {
             actor: actorEntity,
             token: tokenData,
-            macros: this.macros.filter(macro => macro.actor.id === actor._id || macro.actor === actor._id).map(macro => {
+            macros: game.macros.macros.filter(macro => macro.actor.id === actor._id || macro.actor === actor._id).map(macro => {
                 macro.actor = { id: actor._id, name: actor.data.name };
                 return macro;
             })
@@ -1135,11 +1109,11 @@ class EnhancementSuite {
 
         this.parseItems(actor, items);
 
-        const macros = this.macros.filter(macro => macro.actor.name !== actorObj['name']).concat(data.macros.map(macro => {
+        const macros = game.macros.macros.filter(macro => macro.actor.name !== actorObj['name']).concat(data.macros.map(macro => {
             macro.actor = { id: actor._id, name: actorObj['name'] };
             return macro;
         }));
-        game.settings.set(game.data.system.name, 'macros', JSON.stringify(macros));
+        game.macros.save(macros);
     }
 
     /**
