@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.0
+ * @version 0.3.1
  */
 
 class EnhancementSuite {
@@ -976,7 +976,6 @@ class EnhancementSuite {
         let types = [];
 
         const norm = $(chatCard).find('normaldamage').text().match(rgx);
-        console.log(chatCard);
         if (norm) {
             norm.forEach((dmg) => {
                 const parts = dmg.split(' ');

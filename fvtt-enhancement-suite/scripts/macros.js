@@ -95,7 +95,7 @@ class Macros {
 
         Hooks.on('updateActor', actor => {
             this.actors = duplicate(game.actors.source);
-            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.actorMacros
+            game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros
                 .map(macro => {
                     if (macro.actor.id === actor.data._id) {
                         macro.actor.name = actor.data.name;
@@ -108,7 +108,7 @@ class Macros {
         Hooks.on('deleteActor', id => {
             this.actors.filter(a => a._id === id).forEach(a => {
                 if (!Object.entries(a.permission).find(kv => kv[1] === 3)) {
-                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.actorMacros.filter(m => m.actor.id !== id)));
+                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros.filter(m => m.actor.id !== id)));
                 }
             });
             this.actors = duplicate(game.actors.source);
