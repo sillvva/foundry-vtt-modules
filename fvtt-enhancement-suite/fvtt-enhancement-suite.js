@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.1
+ * @version 0.3.2
  */
 
 class EnhancementSuite {
@@ -663,10 +663,9 @@ class EnhancementSuite {
             if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
                 if (macro.type === 'weapon') {
                     if (!actor) { alert('No actor selected'); return; }
-                    let actor = actor.data;
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
-                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                        item = new Item(actor.data.items.find(i => i.id === itemId), actor);
                     game.macros.parse(item.data.data.description.value, actor).then(message => {
                         item.data.data.description.value = message;
                         item.roll();
@@ -677,7 +676,7 @@ class EnhancementSuite {
                     if (!actor) { alert('No actor selected'); return; }
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
-                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                        item = new Item(actor.data.items.find(i => i.id === itemId), actor);
                     game.macros.parse(item.data.data.description.value, actor).then(message => {
                         item.data.data.description.value = message;
                         item.roll();
@@ -688,7 +687,7 @@ class EnhancementSuite {
                     if (!actor) { alert('No actor selected'); return; }
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
-                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                        item = new Item(actor.data.items.find(i => i.id === itemId), actor);
                     game.macros.parse(item.data.data.description.value, actor).then(message => {
                         item.data.data.description.value = message;
                         item.roll();
@@ -699,7 +698,7 @@ class EnhancementSuite {
                     if (!actor) { alert('No actor selected'); return; }
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
-                        item = new Item(actor.items.find(i => i.id === itemId), actor.data);
+                        item = new Item(actor.data.items.find(i => i.id === itemId), actor);
                     game.macros.parse(item.data.data.description.value, actor).then(message => {
                         item.data.data.description.value = message;
                         item.roll();
