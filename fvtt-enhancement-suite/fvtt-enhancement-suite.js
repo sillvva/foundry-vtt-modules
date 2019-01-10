@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.2
+ * @version 0.3.3
  */
 
 class EnhancementSuite {
@@ -662,7 +662,7 @@ class EnhancementSuite {
         Hooks.on('triggerMacro', (macro, actor) => {
             if (game.data.system.name === CONFIG.EnhancementSuite.settings.dnd5e) {
                 if (macro.type === 'weapon') {
-                    if (!actor) { alert('No actor selected'); return; }
+                    if (!actor) { ui.notifications.error('No actor selected'); return; }
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
                         item = new Item(actor.data.items.find(i => i.id === itemId), actor);
@@ -673,7 +673,7 @@ class EnhancementSuite {
                 }
 
                 if (macro.type === 'spell') {
-                    if (!actor) { alert('No actor selected'); return; }
+                    if (!actor) { ui.notifications.error('No actor selected'); return; }
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
                         item = new Item(actor.data.items.find(i => i.id === itemId), actor);
@@ -684,7 +684,7 @@ class EnhancementSuite {
                 }
 
                 if (macro.type === 'tool') {
-                    if (!actor) { alert('No actor selected'); return; }
+                    if (!actor) { ui.notifications.error('No actor selected'); return; }
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
                         item = new Item(actor.data.items.find(i => i.id === itemId), actor);
@@ -695,7 +695,7 @@ class EnhancementSuite {
                 }
 
                 if (macro.type === 'feat') {
-                    if (!actor) { alert('No actor selected'); return; }
+                    if (!actor) { ui.notifications.error('No actor selected'); return; }
                     let itemId = Number(macro.iid),
                         Item = CONFIG.Item.entityClass,
                         item = new Item(actor.data.items.find(i => i.id === itemId), actor);
@@ -706,7 +706,7 @@ class EnhancementSuite {
                 }
 
                 if (macro.type === 'saving-throw') {
-                    if (!actor) { alert('No actor selected'); return; }
+                    if (!actor) { ui.notifications.error('No actor selected'); return; }
                     if (macro.subtype === 'prompt') {
                         const dialog = new Dialog({
                             title: "Saving Throw",
@@ -727,7 +727,7 @@ class EnhancementSuite {
                 }
 
                 if (macro.type === 'ability-check') {
-                    if (!actor) { alert('No actor selected'); return; }
+                    if (!actor) { ui.notifications.error('No actor selected'); return; }
                     if (macro.subtype === 'prompt') {
                         const dialog = new Dialog({
                             title: "Ability Checks",

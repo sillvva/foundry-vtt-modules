@@ -6,7 +6,7 @@ class SuiteHooks extends Hooks {
     static callAllValues(hook, initial, ...args) {
         if (!hooks.hasOwnProperty(hook)) return initial;
         console.log(`${vtt} | Called ${hook} hook`);
-        return hooks[hook].reduce((i, fn) => fn(i, ...args) || i, initial) || initial;
+        return hooks[hook].reduce((final, fn) => fn(final, ...args) || final, initial) || initial;
     }
 }
 
@@ -149,14 +149,14 @@ class Macros {
      * Hook into the Chat API
      */
     hookChat() {
-        Hooks.on('chatMessage', (chatLog, chatData) => {
-            const hasMacro = (chatData.input || chatData.content || '').match(/\{\{[^\}]+\}\}|\[\[[^\]]+\]\]|\?\{[^\}]+\}|@\{[^\}]+\}/);
+        Hooks.on('chatMessage', (chatLog, message, chatData) => {
+            const hasMacro = message.match(/\{\{[^\}]+\}\}|\[\[[^\]]+\]\]|\?\{[^\}]+\}|@\{[^\}]+\}/);
             if (hasMacro) {
                 const cTokens = canvas.tokens.controlledTokens;
                 if (cTokens.length === 1) {
                     var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
                 }
-                this.parseToMessage(chatLog, chatData.input || chatData.content || '', actor);
+                this.parseToMessage(chatLog, message, actor);
                 return false;
             }
         });
@@ -172,10 +172,10 @@ class Macros {
      */
     parseToMessage(chatLog, content, actor) {
         this.parse(content, actor, content.indexOf('/(b(lind)?|gm)?r(oll)?') < 0).then(message => {
-            chatLog._prepareMessageData(message).then(chatData => {
-                if ( !chatData ) return;
-                if ( Hooks.call("chatMessage", chatLog, chatData) === false ) return;
-                ChatMessage.create(chatData);
+            chatLog._processMessageData(message).then(chatData => {
+
+            }).catch(error => {
+                ui.notifications.error(error);
             });
         });
     }
@@ -1060,7 +1060,6 @@ class MacroBar extends Application {
             }
 
             if (macro.type === 'custom') {
-                console.log(ui.chat);
                 game.macros.parseToMessage(ui.chat, macro.content, actor);
             } else {
                 Hooks.call('triggerMacro', macro, actor);
