@@ -32,13 +32,21 @@
 }
 .window-app.sheet.actor-sheet.toolbar-collapsed {
     padding-left: 60px;
-    min-width: 700px;
+    /*min-width: 800px;*/
 }
 .window-app.sheet.actor-sheet .window-content {
     resize: both;
     overflow: auto;
 }
 .dnd5e.actor-sheet {
+    position: relative;
+}
+.dnd5e.actor-sheet .sheet-sidebar img.sheet-profile {
+    flex: 0 1 220px;
+    min-height: 220px;
+}
+/*
+.dnd5e.actor-sheet form {
     position: relative;
 }
 .dnd5e.actor-sheet .sheet-body {
@@ -69,10 +77,6 @@
     bottom: 0;
     width: 250px;
 }
-.dnd5e.actor-sheet .sheet-sidebar img.sheet-profile {
-    flex: 0 1 250px;
-    min-height: 250px;
-}
 .dnd5e.actor-sheet .sheet-sidebar nav.sheet-tabs {
     margin-top: 5px;
     flex: 0 1 32px;
@@ -88,7 +92,7 @@
 }
 .dnd5e.actor-sheet .sheet-header .charlevel .experience > input[type="text"] + span {
     flex: none !important;
-}
+}*/
 .window-app.sheet::after {
     content: ' ';
     position: absolute;
@@ -112,6 +116,7 @@
     top: 0;
     left: 0;
     bottom: 0;
+    z-index: -1;
     border-radius: 0 0 0 5px;
     overflow-y: auto;
     width: 160px;
