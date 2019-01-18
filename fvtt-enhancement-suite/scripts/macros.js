@@ -742,17 +742,25 @@ class MacroConfig extends Application {
                 return false;
             })
             .reduce((output, macro) => {
+                const inbar = macro.inbar === 'Y' || macro.inbar == null ? 'checked' : '';
                 output += `<div class="macro custom">
                     <div class="macro-list">
                         <div class="macro-list-name">
                             ${macro.label}
                         </div>
+                        <label>
+                            <input type="checkbox" name="inbar" ${inbar}>
+                            In Bar
+                        </label>
                         <a class="macro-list-btn fas fa-edit"></a>
                         <a class="macro-list-btn fas fa-times"></a>
                     </div>
                     <div class="macro-edit hide">
                         <div class="macro-label">
                             <input type="text" name="label" value="${macro.label}" placeholder="Macro Name" data-type="String" />
+                        </div>
+                        <div class="macro-color">
+                            <input type="color" name="color" value="${macro.color || '#ffffff'}" />
                         </div>
                         <div class="macro-content">
                             <textarea name="content" rows="8" data-type="String">${macro.content}</textarea>
@@ -762,15 +770,18 @@ class MacroConfig extends Application {
                 return output;
             }, '');
 
+        let actionButtons = '<button class="new-custom-macro" role="button">Add Macro</button>';
+        if (this.data.scope === 'actor') {
+            actionButtons += '<button class="import-xml" role="button">Import XML</button>';
+            actionButtons += '<button class="export-xml" role="button">Export XML</button>';
+        }
+
         const tab = {
             tabId: 'custom',
             tabName: 'Custom',
-            html: `<div class="macros">
-                    `+existingMacros+`
-                </div>
-                <div class="macro-action-bar">
-                    <button class="new-custom-macro btn btn-dark" role="button">Add Macro</button>
-                </div>`,
+            html: `
+                <div class="macro-action-bar">${actionButtons}</div>
+                <div class="macros">${existingMacros}</div>`,
         };
 
         tab.onLoad = (html) => {
@@ -779,6 +790,49 @@ class MacroConfig extends Application {
                 html.find('.macros').append(this.constructor._customMacroTemplate);
                 this._customMacroEventListeners(html);
             });
+            html.find('.export-xml').off('click').on('click', (ev) => {
+                ev.preventDefault();
+                const xml = $('<macros></macros>');
+
+                game.macros.macros
+                    .filter(m => m.actor && m.type === 'custom')
+                    .filter(m => m.actor.id === this.data.actor.id)
+                    .forEach(m => {
+                        const macro = $('<macro></macro>');
+                        macro.append($('<name></name>').append(m.label));
+                        macro.append($('<color></color>').append(m.color || '#ffffff'));
+                        macro.append($('<inbar></inbar>').append(m.inbar || 'Y'));
+                        macro.append($('<content></content>').append(m.content));
+                        xml.append(macro);
+                    });
+
+                const formattedXML = this.formatFactory(xml.clone().wrap('<div>').parent().html());
+                this.exportMacrosXML(formattedXML);
+
+                return false;
+            });
+            html.find('.import-xml').off('click').on('click', (ev) => {
+                ev.preventDefault();
+
+                const input = $('<input type="file" accept="application/xml" class="file-import hide" />');
+                html.find('.file-import').remove();
+                html.append(input);
+                input.change((e) => {
+                    for (let i = 0; i < e.target.files.length; i++) {
+                        const file = e.target.files[i];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                this.readMacroXML(e.target.result);
+                                html.find('.file-import').remove();
+                            };
+                            reader.readAsText(file);
+                        }
+                    }
+                }).click();
+
+                return false;
+            });
             this._customMacroEventListeners(html);
         };
 
@@ -786,6 +840,8 @@ class MacroConfig extends Application {
             const macroEntries = html.find('.macro.custom');
             for(let i = 0; i < macroEntries.length; i++) {
                 let label = $(macroEntries[i]).find('[name="label"]').val();
+                let color = $(macroEntries[i]).find('[name="color"]').val();
+                let inbar = $(macroEntries[i]).find('[name="inbar"]').prop('checked') ? 'Y' : 'N';
                 let content = $(macroEntries[i]).find('[name="content"]').val();
                 if (label.length === 0) continue;
 
@@ -794,6 +850,8 @@ class MacroConfig extends Application {
                     cid: i,
                     type: 'custom',
                     label: label,
+                    color: color,
+                    inbar: inbar,
                     content: content
                 };
 
@@ -811,6 +869,121 @@ class MacroConfig extends Application {
         };
 
         this.addTab(tab);
+    }
+
+    /* -------------------------------------------- */
+
+    setTabs(numTabs) {
+        let tabs = '';
+
+        for (let i = 0; i < numTabs; i++){
+            tabs += '    ';
+        }
+        return tabs;
+    };
+
+    formatHTML(html, numTabs = 0) {
+        html = $.parseHTML(html);
+        let formatted = '';
+
+        $.each( html, ( i, el ) => {
+            if (el.nodeName === '#text') {
+                if (($(el).text().trim()).length) {
+                    formatted += this.setTabs(numTabs) + $(el).text().trim() + '\n';
+                }
+            } else {
+                let innerHTML = $(el).html().trim();
+                $(el).html(innerHTML.replace('\n', '').replace(/ +(?= )/g, ''));
+
+                if ($(el).children().length) {
+                    $(el).html('\n' + this.formatHTML(innerHTML, (numTabs + 1)) + this.setTabs(numTabs));
+                    let outerHTML = $(el).prop('outerHTML').trim();
+                    formatted += this.setTabs(numTabs) + outerHTML + '\n';
+
+                } else {
+                    let outerHTML = $(el).prop('outerHTML').trim();
+                    formatted += this.setTabs(numTabs) + outerHTML + '\n';
+                }
+            }
+        });
+
+        return formatted;
+    };
+
+    formatFactory(html) {
+        return this.formatHTML(html.replace(/(\r\n|\n|\r)/gm,"\n").replace(/ +(?= )/g,''));
+    }
+
+    readMacroXML(macroXML) {
+        const macros = $(macroXML).find('macro').toArray();
+        let mid = 0;
+        let cid = 0;
+        const gMacros = duplicate(game.macros.macros)
+            .filter(m => m.actor ? !(m.actor.id === this.data.actor.id && m.type === 'custom') : true)
+            .map(m => {
+                m.mid = mid;
+                mid++;
+                if (m.cid) {
+                    m.cid = cid;
+                    cid++;
+                }
+                return m;
+            });
+
+        macros.forEach((macro, i) => {
+            let label = '', color = '#ffffff', inbar = 'Y', content = '';
+            if (!$(macro).find('name')) { ui.notifications.error(`Macro #${i+1} has no name`); return; }
+
+            label = $(macro).find('name').text();
+            if ($(macro).find('color')) color = $(macro).find('color').text();
+            if ($(macro).find('inbar')) inbar = $(macro).find('inbar').text();
+            content = $(macro).find('content').html().trim().replace(/(\r\n|\r|\n)(    ){3}/g, "\n");
+
+            gMacros.push({
+                mid: mid,
+                cid: cid,
+                actor: { id: this.data.actor.id, name: this.data.actor.data.name },
+                type: 'custom',
+                label: label,
+                color: color,
+                inbar: inbar,
+                content: content
+            });
+
+            cid++;
+            mid++;
+        });
+
+        game.macros.save(gMacros);
+
+        // Refresh the config window with the new data
+        new MacroConfig({
+            scope: 'actor',
+            actor: this.data.actor
+        }, {
+            width: 650
+        }).render(true);
+    }
+
+    /* -------------------------------------------- */
+
+    // IMPORT/EXPORT
+
+    /**
+     * Export macros as XML
+     * @param actor
+     */
+    exportMacrosXML(xml) {
+        const blob = new Blob([xml], { type: "text/xml;charset=utf-8" });
+        const fileURL = URL.createObjectURL(blob);
+        const win = window.open();
+        const element = win.document.createElement('a');
+        $(element)
+            .attr('href', fileURL)
+            .attr('download', this.data.actor.data.name.replace(/[^_\-a-z0-9 ]/gi, '')+'.macros.xml');
+        win.document.body.appendChild(element);
+        element.click();
+        setTimeout(() => {win.close();}, 500);
     }
 
     /* -------------------------------------------- */
@@ -938,12 +1111,19 @@ class MacroConfig extends Application {
                 <div class="macro-list-name">
                     New Macro
                 </div>
+                <label>
+                    <input type="checkbox" name="inbar">
+                    In Bar
+                </label>
                 <a class="macro-list-btn fas fa-edit"></a>
                 <a class="macro-list-btn fas fa-times"></a>
             </div>
             <div class="macro-edit">
                 <div class="macro-label">
                     <input type="text" name="label" placeholder="Macro Name" />
+                </div>
+                <div class="macro-color">
+                    <input type="color" name="color" value="#ffffff" />
                 </div>
                 <div class="macro-content">
                     <textarea name="content" rows="8"></textarea>
@@ -977,26 +1157,36 @@ class MacroBar extends Application {
         // Get the macros sorted into actors
         let macroTabs = [];
 
-        game.macros.macros.filter(macro => macro.global).forEach(macro => {
-            let m = duplicate(macro);
-            let mai = macroTabs.findIndex(ma => ma.name === 'global');
-            if (mai < 0) {
-                mai = macroTabs.length;
-                macroTabs.push({ id: 'global', name: 'Global', macros: []});
-            }
-            macroTabs[mai].macros.push(m);
-        });
-        game.macros.macros.filter(macro => macro.world).forEach(macro => {
-            let m = duplicate(macro);
-            if (macro.world.name !== game.data.world.name) return;
-            let mai = macroTabs.findIndex(ma => ma.name === m.world.name);
-            if (mai < 0) {
-                mai = macroTabs.length;
-                macroTabs.push({ id: 'world', name: m.world.name, macros: []});
-            }
-            macroTabs[mai].macros.push(m);
-        });
-        game.macros.macros.filter(macro => macro.actor)
+        game.macros.macros
+            .filter(macro => macro.global)
+            .filter(macro => (macro.type === 'custom' && (macro.inbar === 'Y' || macro.inbar == null)) || macro.type !== 'custom')
+            .forEach(macro => {
+                let m = duplicate(macro);
+                let mai = macroTabs.findIndex(ma => ma.name === 'global');
+                if (mai < 0) {
+                    mai = macroTabs.length;
+                    macroTabs.push({ id: 'global', name: 'Global', macros: []});
+                }
+                m = this._colors(m);
+                macroTabs[mai].macros.push(m);
+            });
+        game.macros.macros
+            .filter(macro => macro.world)
+            .filter(macro => (macro.type === 'custom' && (macro.inbar === 'Y' || macro.inbar == null)) || macro.type !== 'custom')
+            .forEach(macro => {
+                let m = duplicate(macro);
+                if (macro.world.name !== game.data.world.name) return;
+                let mai = macroTabs.findIndex(ma => ma.name === m.world.name);
+                if (mai < 0) {
+                    mai = macroTabs.length;
+                    macroTabs.push({ id: 'world', name: m.world.name, macros: []});
+                }
+                m = this._colors(m);
+                macroTabs[mai].macros.push(m);
+            });
+        game.macros.macros
+            .filter(macro => macro.actor)
+            .filter(macro => (macro.type === 'custom' && (macro.inbar === 'Y' || macro.inbar == null)) || macro.type !== 'custom')
             .sort((a, b) => {
                 if(a.actor.name !== b.actor.name) {
                     return a.actor.name > b.actor.name ? 1 : -1
@@ -1010,6 +1200,7 @@ class MacroBar extends Application {
                     mai = macroTabs.length;
                     macroTabs.push(Object.assign(m.actor, {macros: []}));
                 }
+                m = this._colors(m);
                 macroTabs[mai].macros.push(m);
             });
 
@@ -1027,6 +1218,27 @@ class MacroBar extends Application {
             return;
         }
         super.render(force);
+    }
+
+    /* -------------------------------------------- */
+
+    _colors(macro) {
+        if (macro.type === 'custom') {
+            macro.textColor = this.constructor._isLight(macro.color || '#ffffff') ? '#000000' : '#ffffff';
+        }
+        return macro;
+    }
+
+    static _isLight(color) {
+        let c = color.substring(1);      // strip #
+        let rgb = parseInt(c, 16);   // convert rrggbb to decimal
+        let r = (rgb >> 16) & 0xff;  // extract red
+        let g = (rgb >>  8) & 0xff;  // extract green
+        let b = (rgb >>  0) & 0xff;  // extract blue
+
+        let luma = 0.2126 * r + 0.7152 * g + 0.0722 * b; // per ITU-R BT.709
+
+        return luma >= 128;
     }
 
     /* -------------------------------------------- */
