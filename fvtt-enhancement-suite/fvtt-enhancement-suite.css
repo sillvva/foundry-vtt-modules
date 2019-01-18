@@ -206,6 +206,25 @@
 .macro-sheet .macro-edit.hide {
     display: none;
 }
+.macro-sheet .sheet-tabs {
+    flex: 0 0 28px;
+    margin-top: 2px;
+    padding: 0 2px;
+    border-bottom: 1px solid #666;
+}
+.macro-sheet .sheet-tabs > .item {
+    line-height: 28px;
+    padding: 0 10px;
+    border-radius: 5px 5px 0 0;
+}
+.macro-sheet .sheet-tabs > .item.active {
+    color: #000;
+    font-weight: 700;
+    border: 1px solid #666;
+    border-bottom: none;
+    box-shadow: 0 0 10px inset #ff6400;
+    text-shadow: none;
+}
 .macro-sheet .macros {
     max-height: 500px;
     overflow-y: auto;
