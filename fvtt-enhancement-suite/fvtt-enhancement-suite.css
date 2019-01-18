@@ -230,6 +230,15 @@
     display: flex;
     padding: 8px 4px;
 }
+.macro-sheet .macro-list label {
+    display: flex;
+    align-items: center;
+}
+.macro-sheet .macro-list input[type=checkbox] {
+    width: auto;
+    min-width: 0;
+    max-width: 100%;
+}
 .macro-sheet .macro-list .macro-list-name {
     flex: 1 0;
 }

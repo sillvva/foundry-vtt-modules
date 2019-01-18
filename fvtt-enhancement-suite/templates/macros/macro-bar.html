@@ -9,7 +9,7 @@
     {{#each tabs as |tab maid|}}
     <div class="tab" data-tab="{{tab.id}}">
         {{#each tab.macros as |macro mid|}}
-        <button data-macro-id="{{macro.mid}}">{{macro.label}}</button>
+        <button data-macro-id="{{macro.mid}}" style="border-color: {{macro.color}}; background-color: {{macro.color}}; color: {{macro.textColor}};">{{macro.label}}</button>
         {{/each}}
     </div>
     {{/each}}
