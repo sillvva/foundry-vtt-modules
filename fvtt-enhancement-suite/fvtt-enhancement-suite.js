@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.5
+ * @version 0.3.6
  */
 
 class EnhancementSuite {

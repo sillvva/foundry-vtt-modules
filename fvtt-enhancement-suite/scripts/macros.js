@@ -34,6 +34,7 @@ class Macros {
         this.macros = [];
         this.actors = [];
         this.rollReferences = {};
+        this.nested = [];
 
         // Register hooks
         this.hookReady();
@@ -150,13 +151,13 @@ class Macros {
      */
     hookChat() {
         Hooks.on('chatMessage', (chatLog, message, chatData) => {
-            const hasMacro = message.match(/\{\{[^\}]+\}\}|\[\[[^\]]+\]\]|\?\{[^\}]+\}|@\{[^\}]+\}/);
+            const hasMacro = message.match(/\{\{[^\}]+\}\}|\#\{[^\}]+}|\[\[[^\]]+\]\]|\?\{[^\}]+\}|@\{[^\}]+\}/);
             if (hasMacro) {
                 const cTokens = canvas.tokens.controlledTokens;
                 if (cTokens.length === 1) {
                     var actor = game.actors.entities.find(a => a._id === cTokens[0].data.actorId);
                 }
-                this.parseToMessage(chatLog, message, actor);
+                this.parseToMessage(chatLog, { type: 'custom', content: message, label: 'Chat Message' }, actor);
                 return false;
             }
         });
@@ -170,13 +171,31 @@ class Macros {
      * @param content
      * @param actor
      */
-    parseToMessage(chatLog, content, actor) {
-        this.parse(content, actor, content.indexOf('/(b(lind)?|gm)?r(oll)?') < 0).then(message => {
+    parseToMessage(chatLog, macro, actor) {
+        this.nested.push(this._macroTag(macro.type, macro.label));
+        this.parse(macro.content, actor, macro.content.indexOf('/(b(lind)?|gm)?r(oll)?') < 0).then(message => {
+            this.nested = [];
             chatLog._processMessageData(message).then(chatData => {
 
             }).catch(error => {
                 ui.notifications.error(error);
             });
+        });
+    }
+
+    /**
+     * Parse a rollable table and create chat entry in ChatLog
+     * @param chatLog
+     * @param macro
+     * @param actor
+     */
+    rollTableToMessage(chatLog, macro, actor) {
+        this.rollTable(macro.table).then(content => {
+            content = `<strong>${macro.label}</strong><br />${content}`;
+            macro.content = content;
+            this.parseToMessage(chatLog, macro, actor);
+        }).catch(error => {
+            ui.notifications.error(error);
         });
     }
 
@@ -214,10 +233,82 @@ class Macros {
         let parsed = await this.parsePrompts(message);
         message = this.parsePromptOptionReferences(parsed.message, parsed.references);
         message = SuiteHooks.callAllValues('parseMacrosAfterPrompts', message, actor);
+        message = await this.parseNested(message, actor, tooltips);
         message = this.parseRolls(message, tooltips);
         message = this.parseRollReferences(message);
         message = SuiteHooks.callAllValues('parseMacrosEnd', message, actor);
         return message;
+    }
+
+    /* -------------------------------------------- */
+
+    // NESTED
+
+    async parseNested(message, actor, tooltips) {
+        const macros = {};
+        const types = ['custom','table'];
+        if (actor) {
+            game.macros.macros
+                .filter(macro => macro.actor && types.find(type => type === macro.type) && macro.actor.id === actor.id)
+                .forEach(macro => {
+                    const tag = this._macroTag(macro.type, macro.label);
+                    if (!macros[tag] && !this.nested.find(n => n === tag)) {
+                        macros[tag] = macro;
+                    }
+                });
+        }
+        game.macros.macros
+            .filter(macro => macro.world && types.find(type => type === macro.type))
+            .forEach(macro => {
+                const tag = this._macroTag(macro.type, macro.label);
+                if (!macros[tag] && !this.nested.find(n => n === tag)) {
+                    macros[tag] = macro;
+                }
+            });
+        game.macros.macros
+            .filter(macro => macro.global && types.find(type => type === macro.type))
+            .forEach(macro => {
+                const tag = this._macroTag(macro.type, macro.label);
+                if (!macros[tag] && !this.nested.find(n => n === tag)) {
+                    macros[tag] = macro;
+                }
+            });
+        const rgx = new RegExp(`\\#\\{(${types.join('|')})\\|([^\\}]+)\\}`, 'g');
+        const m = message.match(rgx);
+        if (m) {
+            for(let match of m) {
+                if (macros[match]) {
+                    if (macros[match].type === 'custom') {
+                        this.nested.push(match);
+                        message = await this.parse(message.replace(match, macros[match].content), actor, tooltips);
+                    } else if (macros[match].type === 'table') {
+                        message = message.replace(match, await this.rollTable(macros[match].table));
+                    }
+                } else {
+                    message = message.replace(match, '');
+                }
+            }
+        }
+        return message;
+    }
+
+    /* -------------------------------------------- */
+
+    // TABLES
+
+    async rollTable(table) {
+        const max = table.reduce((total, entry) => total + entry.weight, 0);
+        const roll = Math.floor(Math.random() * max) + 1;
+
+        let total = 0;
+        for (let i = 0; i < table.length; i++) {
+            total += table[i].weight;
+            if (roll <= total) {
+                return table[i].value;
+            }
+        }
+
+        throw new Error('Error in rollable table');
     }
 
     /* -------------------------------------------- */
@@ -652,6 +743,12 @@ class Macros {
 
     /* -------------------------------------------- */
 
+    _macroTag(type, label) {
+        return `#{${type}|${label.replace(/[^a-z0-9 \-_]/gi, '').replace(/ /g, '-').toLowerCase()}}`;
+    }
+
+    /* -------------------------------------------- */
+
     // CLEANING
 
     /**
@@ -704,6 +801,7 @@ class MacroConfig extends Application {
         });
 
         this.addCustomTab();
+        this.addTablesTab();
 
         Hooks.callAll('preRenderMacroConfig', this, this.getData());
     }
@@ -717,7 +815,7 @@ class MacroConfig extends Application {
         const options = super.defaultOptions;
         options.title = "Macro Configuration";
         options.template = CONFIG.Macros.templatePath+CONFIG.Macros.templates.macroConfig;
-        options.width = 600;
+        options.width = 800;
         return options;
     }
 
@@ -759,21 +857,22 @@ class MacroConfig extends Application {
                         <div class="macro-label">
                             <input type="text" name="label" value="${macro.label}" placeholder="Macro Name" data-type="String" />
                         </div>
+                        <div class="macro-tag">Macro Tag: ${game.macros._macroTag('custom', macro.label)}</div>
                         <div class="macro-color">
                             <input type="color" name="color" value="${macro.color || '#ffffff'}" />
                         </div>
                         <div class="macro-content">
-                            <textarea name="content" rows="8" data-type="String">${macro.content}</textarea>
+                            <textarea name="content" rows="8">${macro.content}</textarea>
                         </div>
                     </div>
                 </div>`;
                 return output;
             }, '');
 
-        let actionButtons = '<button class="new-custom-macro" role="button">Add Macro</button>';
+        let actionButtons = '<button class="new-custom-macro" role="button"><span class="fa fa-plus"></span> Add Macro</button>';
         if (this.data.scope === 'actor') {
-            actionButtons += '<button class="import-xml" role="button">Import XML</button>';
-            actionButtons += '<button class="export-xml" role="button">Export XML</button>';
+            actionButtons += '<button class="import-xml" role="button"><span class="fa fa-upload"></span> Import XML</button>';
+            actionButtons += '<button class="export-xml" role="button"><span class="fa fa-download"></span> Export XML</button>';
         }
 
         const tab = {
@@ -788,8 +887,11 @@ class MacroConfig extends Application {
             html.find('.new-custom-macro').off('click').on('click', (ev) => {
                 ev.preventDefault();
                 html.find('.macros').append(this.constructor._customMacroTemplate);
-                this._customMacroEventListeners(html);
+                html.find('.macro').each((i, el) => {
+                    this._customMacroEventListeners($(el));
+                });
             });
+
             html.find('.export-xml').off('click').on('click', (ev) => {
                 ev.preventDefault();
                 const xml = $('<macros></macros>');
@@ -811,6 +913,7 @@ class MacroConfig extends Application {
 
                 return false;
             });
+
             html.find('.import-xml').off('click').on('click', (ev) => {
                 ev.preventDefault();
 
@@ -833,7 +936,10 @@ class MacroConfig extends Application {
 
                 return false;
             });
-            this._customMacroEventListeners(html);
+
+            html.find('.macro').each((i, el) => {
+                this._customMacroEventListeners($(el));
+            });
         };
 
         tab.onSave = (html, macros) => {
@@ -869,6 +975,151 @@ class MacroConfig extends Application {
         };
 
         this.addTab(tab);
+    }
+
+    /* -------------------------------------------- */
+
+    /**
+     * Add tab for rollable tables
+     */
+    addTablesTab() {
+        const existingMacros = game.macros.macros
+            .filter(macro => {
+                if (macro.type !== 'table') return false;
+                if (this.data.scope === 'actor' && macro.actor) return macro.actor.name === this.data.actor.data.name;
+                if (this.data.scope === 'world' && macro.world) return macro.world.name === this.data.world.name;
+                if (this.data.scope === 'global' && macro.global) return true;
+                return false;
+            })
+            .reduce((output, macro) => output + this._table(macro), '');
+
+        let actionButtons = '<button class="new-rollable-table" role="button"><span class="fa fa-plus"></span> Add Table</button>';
+        /*if (this.data.scope === 'actor') {
+            actionButtons += '<button class="import-xml" role="button"><span class="fa fa-upload"></span> Import XML</button>';
+            actionButtons += '<button class="export-xml" role="button"><span class="fa fa-download"></span> Export XML</button>';
+        }*/
+
+        const tab = {
+            tabId: 'table',
+            tabName: 'Rollable Tables',
+            flex: 2,
+            html: `
+                <div class="macro-action-bar">${actionButtons}</div>
+                <div class="macros">${existingMacros}</div>`,
+        };
+
+        tab.onLoad = (html) => {
+            html.find('.new-rollable-table').off('click').on('click', (ev) => {
+                ev.preventDefault();
+
+                const macro = {
+                    label: 'Unnamed Table',
+                    inbar: 'Y',
+                    color: '#ffffff',
+                    table: [
+                        { weight: '', value: '' }
+                    ]
+                };
+
+                html.find('.macros').append(this._table(macro));
+
+                html.find('.macro').each((i, el) => {
+                    this._rollableTableEventListeners($(el));
+                });
+            });
+
+            html.find('.macro').each((i, el) => {
+                this._rollableTableEventListeners($(el));
+            });
+        };
+
+        tab.onSave = (html, macros) => {
+            const macroEntries = html.find('.macro.rollable-table');
+            for(let i = 0; i < macroEntries.length; i++) {
+                let label = $(macroEntries[i]).find('[name="label"]').val();
+                let color = $(macroEntries[i]).find('[name="color"]').val();
+                let inbar = $(macroEntries[i]).find('[name="inbar"]').prop('checked') ? 'Y' : 'N';
+                const tableEntries = $(macroEntries[i]).find('.macro-table');
+                if (label.length === 0) continue;
+                if (tableEntries.length === 0) continue;
+
+                let data = {
+                    mid: macros.length,
+                    tid: i,
+                    type: 'table',
+                    label: label,
+                    color: color,
+                    inbar: inbar,
+                    table: []
+                };
+
+                for(let t = 0; t < tableEntries.length; t++) {
+                     const weight = parseInt($(tableEntries[t]).find('[name="weight"]').val());
+                     const value = $(tableEntries[t]).find('[name="value"]').val();
+                     data.table.push({ weight: isNaN(weight) ? 1 : weight, value: value });
+                }
+
+                if(this.data.scope === 'actor') {
+                    data.actor = { id: this.data.actor._id, name: this.data.actor.data.name };
+                } else if (this.data.scope === 'world') {
+                    data.world = { name: this.data.world.name };
+                } else {
+                    data.global = true;
+                }
+
+                macros.push(data);
+            }
+
+            return macros;
+        };
+
+        this.addTab(tab);
+    }
+
+    _table(macro) {
+        const inbar = macro.inbar === 'Y' || macro.inbar == null ? 'checked' : '';
+        return `<div class="macro rollable-table">
+            <div class="macro-list">
+                <div class="macro-list-name">
+                    ${macro.label}
+                </div>
+                <label>
+                    <input type="checkbox" name="inbar" ${inbar}>
+                    In Bar
+                </label>
+                <a class="macro-list-btn fas fa-edit"></a>
+                <a class="macro-list-btn fas fa-times"></a>
+            </div>
+            <div class="macro-edit hide">
+                <div class="macro-label">
+                    <input type="text" name="label" value="${macro.label}" placeholder="Table Name" />
+                </div>
+                <div class="macro-tag">Macro Tag: ${game.macros._macroTag('table', macro.label)}</div>
+                <div class="macro-color">
+                    <input type="color" name="color" value="${macro.color || '#ffffff'}" />
+                </div>
+                <div class="macro-table-entries">
+                    `+macro.table.reduce((table, entry) => {
+                        return `${table} ${this._tableEntry(entry.weight, entry.value)}`;
+                    }, '')+`
+                </div>
+                <div>
+                    <button class="add-table-entry">Add Entry</button>
+                </div>
+            </div>
+        </div>`;
+    }
+
+    _tableEntry(weight, value) {
+        return `<div class="macro-table">
+            <div class="macro-table-weight">
+                <input type="number" name="weight" value="${weight}" placeholder="Weight" />
+            </div>
+            <div class="macro-table-value">
+                <textarea name="value" rows="3" placeholder="Value">${value}</textarea>
+            </div>
+            <a class="table-entry-btn fas fa-times"></a>
+        </div>`;
     }
 
     /* -------------------------------------------- */
@@ -1003,6 +1254,43 @@ class MacroConfig extends Application {
             $(macroEl).find('.macro-edit').toggleClass('hide');
             $(macroEl).find('.macro-list-name').html(label.trim().length > 0 ? label.trim() : 'Unnamed Macro');
         });
+
+        html.find('.macro-label input').off('change').on('change', (ev) => {
+            html.find('.macro-tag').html(`Macro Tag: ${game.macros._macroTag('custom', $(ev.currentTarget).val())}`);
+        }).on('keyup', (ev) => { $(ev.currentTarget).trigger('change') });
+    }
+
+    /* -------------------------------------------- */
+
+    /**
+     * Event listeners that require reloading when certain page elements change
+     * @param {Dialog} dialog - Dialog instance
+     */
+    _rollableTableEventListeners(html) {
+        html.find('.macro-list-btn.fa-times').off('click').on('click', (ev) => {
+            $(ev.target).closest('.macro').remove();
+        });
+
+        html.find('.macro-list-btn.fa-edit').off('click').on('click', (ev) => {
+            let macroEl = $(ev.target).closest('.macro');
+            let label = $(macroEl).find('.macro-label input').val();
+            $(macroEl).find('.macro-edit').toggleClass('hide');
+            $(macroEl).find('.macro-list-name').html(label.trim().length > 0 ? label.trim() : 'Unnamed Table');
+        });
+
+        html.find('.add-table-entry').off('click').on('click', (ev) => {
+            ev.preventDefault();
+            html.find('.macro-table-entries').append(this._tableEntry('', ''));
+            this._rollableTableEventListeners(html);
+        });
+
+        html.find('.table-entry-btn.fa-times').off('click').on('click', (ev) => {
+            $(ev.currentTarget).closest('.macro-table').remove();
+        });
+
+        html.find('.macro-label input').off('change').on('change', (ev) => {
+            html.find('.macro-tag').html(`Macro Tag: ${game.macros._macroTag('table', $(ev.currentTarget).val())}`);
+        }).on('keyup', (ev) => { $(ev.currentTarget).trigger('change') });
     }
 
     /* -------------------------------------------- */
@@ -1091,11 +1379,13 @@ class MacroConfig extends Application {
      */
     _postRender(html, data) {
         this.data.tabs.forEach(tab => {
-            html.find('.tabs').append(`<a class="item" data-tab="${tab.id}" style="flex: ${tab.flex};">${tab.name}</a>`);
+            html.find('.tabs').append(`<a class="item" data-tab="${tab.id}" style="flex: ${tab.flex};">${tab.name.replace(/ /g, '&nbsp;')}</a>`);
             html.find('.tabs').after(`<div class="tab" data-tab="${tab.id}">${tab.html}</div>`)
         });
         super._postRender(html, data);
-        new Tabs(html.find('.sheet-tabs'), html.find('.item').get(0).dataset.tab);
+        new Tabs(html.find('.sheet-tabs'), {
+            initial: html.find('.item').get(0).dataset.tab
+        });
         this.activateListeners(html);
     }
 
@@ -1112,7 +1402,7 @@ class MacroConfig extends Application {
                     New Macro
                 </div>
                 <label>
-                    <input type="checkbox" name="inbar">
+                    <input type="checkbox" name="inbar" checked>
                     In Bar
                 </label>
                 <a class="macro-list-btn fas fa-edit"></a>
@@ -1154,12 +1444,12 @@ class MacroBar extends Application {
     /* -------------------------------------------- */
 
     getData() {
-        // Get the macros sorted into actors
+        // Get the macros sorted into scopes
         let macroTabs = [];
 
         game.macros.macros
             .filter(macro => macro.global)
-            .filter(macro => (macro.type === 'custom' && (macro.inbar === 'Y' || macro.inbar == null)) || macro.type !== 'custom')
+            .filter(macro => ((macro.type === 'custom' || macro.type === 'table') && (macro.inbar === 'Y' || macro.inbar == null)) || (macro.type !== 'custom' && macro.type !== 'table'))
             .forEach(macro => {
                 let m = duplicate(macro);
                 let mai = macroTabs.findIndex(ma => ma.name === 'global');
@@ -1172,7 +1462,7 @@ class MacroBar extends Application {
             });
         game.macros.macros
             .filter(macro => macro.world)
-            .filter(macro => (macro.type === 'custom' && (macro.inbar === 'Y' || macro.inbar == null)) || macro.type !== 'custom')
+            .filter(macro => ((macro.type === 'custom' || macro.type === 'table') && (macro.inbar === 'Y' || macro.inbar == null)) || (macro.type !== 'custom' && macro.type !== 'table'))
             .forEach(macro => {
                 let m = duplicate(macro);
                 if (macro.world.name !== game.data.world.name) return;
@@ -1186,7 +1476,7 @@ class MacroBar extends Application {
             });
         game.macros.macros
             .filter(macro => macro.actor)
-            .filter(macro => (macro.type === 'custom' && (macro.inbar === 'Y' || macro.inbar == null)) || macro.type !== 'custom')
+            .filter(macro => ((macro.type === 'custom' || macro.type === 'table') && (macro.inbar === 'Y' || macro.inbar == null)) || (macro.type !== 'custom' && macro.type !== 'table'))
             .sort((a, b) => {
                 if(a.actor.name !== b.actor.name) {
                     return a.actor.name > b.actor.name ? 1 : -1
@@ -1223,7 +1513,7 @@ class MacroBar extends Application {
     /* -------------------------------------------- */
 
     _colors(macro) {
-        if (macro.type === 'custom') {
+        if (macro.type === 'custom' || macro.type === 'table') {
             macro.textColor = this.constructor._isLight(macro.color || '#ffffff') ? '#000000' : '#ffffff';
         }
         return macro;
@@ -1249,7 +1539,9 @@ class MacroBar extends Application {
      */
     _postRender(html, data) {
         super._postRender(html, data);
-        this.macroTabs = new Tabs(html.find('.bar-tabs'), html.find('.item').get(0).dataset.tab);
+        this.macroTabs = new Tabs(html.find('.bar-tabs'), {
+            initial: html.find('.item').get(0).dataset.tab
+        });
     }
 
     /* -------------------------------------------- */
@@ -1272,17 +1564,23 @@ class MacroBar extends Application {
             }
 
             if (macro.type === 'custom') {
-                game.macros.parseToMessage(ui.chat, macro.content, actor);
+                game.macros.parseToMessage(ui.chat, macro, actor);
+            } else if (macro.type === 'table') {
+                game.macros.rollTableToMessage(ui.chat, macro, actor);
             } else {
                 Hooks.call('triggerMacro', macro, actor);
             }
         });
 
+        $('#macro-bar').hide();
         // When token is selected, select the corresponding actor tab in the macro bar.
         canvas.stage.on('mouseup', (ev) => {
-            if (!(ev.target instanceof Token)) return;
+            if (!(ev.target instanceof Token)) { $('#macro-bar').hide(); return; }
             if (canvas.tokens.controlledTokens.length === 1) {
-                this.macroTabs.activateTab($(`.macro-bar .item[data-tab="${canvas.tokens.controlledTokens[0].data.actorId}"]`));
+                this.macroTabs._activateTab($(`.macro-bar .item[data-tab="${canvas.tokens.controlledTokens[0].data.actorId}"]`));
+                $('#macro-bar').show();
+            } else if (game.macros.macros.find(m => m.world || m.global)) {
+                $('#macro-bar').hide();
             }
         });
     }
