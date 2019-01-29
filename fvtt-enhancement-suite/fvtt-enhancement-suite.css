@@ -226,7 +226,7 @@
     text-shadow: none;
 }
 .macro-sheet .macros {
-    max-height: 500px;
+    max-height: calc(80vh - 180px);
     overflow-y: auto;
     overflow-x: hidden;
 }
@@ -234,7 +234,7 @@
     padding: 5px;
     border-bottom: 1px solid #ccc;
 }
-.macro-sheet .macro-label, .macro-sheet .macro-content {
+.macro-sheet .macro-label, .macro-sheet .macro-content, .macro-sheet .macro-table, .macro-sheet .macro-tag {
     margin: 5px 0;
 }
 .macro-sheet .macro input, .macro-sheet .macro textarea, .macro-sheet .macro button {
@@ -249,6 +249,22 @@
 }
 .macro-sheet .macro-action-bar * {
     margin: 5px; flex: 1;
+}
+.macro-sheet .macro-table {
+    display: flex;
+}
+.macro-sheet .macro-table .macro-table-weight {
+    flex-basis: 60px;
+    padding-right: 5px;
+}
+.macro-sheet .macro-table .macro-table-value {
+    flex: 3;
+}
+.macro-sheet .macro-table .macro-table-value textarea {
+    resize: vertical;
+}
+.macro-sheet .macro-table .table-entry-btn {
+    padding: 5px;
 }
 .macro-sheet .macro-list {
     display: flex;
@@ -269,6 +285,11 @@
 .macro-sheet .macro-list .macro-list-btn {
     padding-left: 10px;
 }
+/*.macro-sheet .new-custom-macro {
+    background-color: #343A40;
+    border-color: #343A40;
+    color: #fff;
+}*/
 
 /**
  * Weapons Configuration
