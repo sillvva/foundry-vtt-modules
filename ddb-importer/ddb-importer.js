@@ -1,13 +1,11 @@
 /**
  * @author Matt DeKok <Sillvva>
- * @version 0.1.6
+ * @version 0.1.8
  */
 
-class BeyondImporter extends Application {
+class BeyondImporter {
 
-    constructor(app) {
-        super(app);
-
+    constructor() {
         this.hookActorSheet();
         this.hookActorList();
         this.hookToolbar5eReady();
@@ -92,15 +90,15 @@ class BeyondImporter extends Application {
      * importCharacterData({ actor: Actor5e });
      */
     importDialog(options = {}) {
-        let out = '';
-
-        out += '<p>Follow these instructions to get your character data from D&amp;D Beyond.</p>';
-        out += '<ol>';
-        out += '<li>Open your character sheet (not the builder) in D&amp;D Beyond.</li>';
-        out += '<li>In your address bar, append <strong>/json</strong> to the end of the URL. It should look like this:<br /><small><em>https://www.dndbeyond.com/profile/username/characters/1234567<strong>/json</strong></em></small></li>';
-        out += '<li>Copy the data on this page into the box below.</li>';
-        out += '</ol>';
-        out += '<p><textarea class="ddb-data form-control" cols="30" rows="5" autofocus placeholder="Paste your character data here"></textarea></p>';
+        let out = `
+            <p>Follow these instructions to get your character data from D&amp;D Beyond.</p>
+            <ol>
+                <li>Open your character sheet (not the builder) in D&amp;D Beyond.</li>
+                <li>In your address bar, append <strong>/json</strong> to the end of the URL. It should look like this:<br /><small><em>https://www.dndbeyond.com/profile/username/characters/1234567<strong>/json</strong></em></small></li>
+                <li>Copy the data on this page into the box below.</li>
+                <p><textarea class="ddb-data form-control" cols="30" rows="5" autofocus placeholder="Paste your character data here"></textarea></p>
+            </ol>
+        `;
 
         // console.log(options.actor);
 
@@ -157,8 +155,7 @@ class BeyondImporter extends Application {
 
         // Create new actor (GM only) if entity is not pre-defined
         if(opts.actor == null) {
-            Actor5e.create({ name: data.character.name, type: 'character' }, true).then(actor => {
-                actor.render(true);
+            Actor5e.create({ name: data.character.name, type: 'character' }, { displaySheet: false }).then(actor => {
                 setTimeout(() => {
                     this.parseCharacterData(actor, data.character);
                 }, 250);
@@ -218,7 +215,7 @@ class BeyondImporter extends Application {
         obj['data.traits.senses.value'] = this.getSenses(character).join(', ');
 
         // Set Resistances, Immunities, Vulnerabilities
-        const defenses = this.getDefenseAdjustments(character);
+        const defenses = this.getDefemseAdjustments(character);
         obj['data.traits.ci.value'] = defenses.conditionImmunities.join(', ');
         obj['data.traits.di.value'] = defenses.damageImmunities.join(', ');
         obj['data.traits.dr.value'] = defenses.resistances.join(', ');
@@ -384,6 +381,11 @@ class BeyondImporter extends Application {
                 }
             }
 
+            let activationTime = spell.definition.activation.activationTime+' '+this._getConfig('spellActivationTimes', 'id', spell.definition.activation.activationType).long+(spell.definition.activation.activationTime === 1 ? '' : 's');
+            if (spell.definition.activation.activationType === 8) {
+                activationTime = 'Special';
+            }
+
             let spellItem = {
                 name: spell.definition.name,
                 type: "spell",
@@ -405,7 +407,7 @@ class BeyondImporter extends Application {
                     source: {type: "String", label: "Source", value: spell.id.toString()},
                     spellType: {type: "String", label: "Spell Type", value: spellType},
                     target: {type: "String", label: "Target", value: ""},
-                    time: {type: "String", label: "Casting Time", value: spell.definition.activation.activationTime+' '+this._getConfig('spellActivationTimes', 'id', spell.definition.activation.activationType).long+(spell.definition.activation.activationTime === 1 ? '' : 's')}
+                    time: {type: "String", label: "Casting Time", value: activationTime}
                 }
             };
 
@@ -422,7 +424,7 @@ class BeyondImporter extends Application {
      *
      * @param {Object} character - Character JSON data string parsed as an object after import
      */
-    getDefenseAdjustments(character) {
+    getDefemseAdjustments(character) {
         let conditionImmunities = [];
         let damageImmunities = [];
         this._getObjects(character.modifiers, 'type', 'immunity').forEach(da => {
@@ -1509,10 +1511,13 @@ CONFIG.BeyondImporter = {
     spellActivationTimes: [
         { id: 0, short: '', long: 'No Action' },
         { id: 1, short: 'A', long: 'Action' },
+        { id: 2, short: '2', long: '2' },
         { id: 3, short: 'BA', long: 'Bonus Action' },
         { id: 4, short: 'R', long: 'Reaction' },
+        { id: 5, short: '5', long: '5' },
         { id: 6, short: 'Min', long: 'Minute' },
         { id: 7, short: 'Hour', long: 'Hour' },
+        { id: 8, short: 'Special', long: 'Special' },
     ],
     customDamageDefenseAdjustments: [
         { id: 1, type: 'resistance', subType: 'Bludgeonining' },
@@ -1578,4 +1583,3 @@ CONFIG.BeyondImporter = {
 };
 
 let ddbi = new BeyondImporter();
-ddbi.render();
