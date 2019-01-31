@@ -1376,7 +1376,7 @@ class BeyondImporter {
      * @param {Number} items - an array of items being added
      * @param {Number} i - Optional. Leave blank on initial call.
      */
-    parseItems(actorEntity, items, i = 0) {
+    async parseItems(actorEntity, items, i = 0) {
         if(items == null) return;
         if(items.length === 0) return;
 
@@ -1392,16 +1392,21 @@ class BeyondImporter {
             return false;
         });
 
+        if (items[i].type === 'spell') {
+            const compSpell = await this.lookupSpell(items[i].name);
+            if (compSpell) {
+                items[i].img = compSpell.data.img;
+            }
+        }
+
         if(it) {
-            actorEntity.updateOwnedItem(Object.assign(it, items[i]), true);
+            await actorEntity.updateOwnedItem(Object.assign(it, items[i]), true);
         } else {
-            actorEntity.createOwnedItem(items[i], true);
+            await actorEntity.createOwnedItem(items[i], true);
         }
 
         if(items.length > i + 1) {
-            setTimeout(() => {
-                this.parseItems(actorEntity, items, i + 1);
-            }, 100);
+            this.parseItems(actorEntity, items, i + 1);
         }
     }
 
@@ -1428,6 +1433,14 @@ class BeyondImporter {
         });
 
         return total;
+    }
+
+    async lookupSpell(name) {
+        game.packs.map(p => p.collection);
+        const pack = game.packs.find(p => p.collection === "dnd5e.spells");
+        const index = await pack.getIndex();
+        const entry = pack.index.find(e => e.name === name);
+        return await pack.getEntity(entry.id);
     }
 
     static getAbilityMod(score) {
