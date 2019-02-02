@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.6
+ * @version 0.3.7
  */
 
 class EnhancementSuite {
@@ -347,8 +347,8 @@ class EnhancementSuite {
                         }, '');
 
                         const featsSection = `<div class="feats-header">
-                                <div class="spell-enable">&nbsp;</div>
-                                <div class="spell-name">Tool</div>
+                                <div class="feat-enable">&nbsp;</div>
+                                <div class="feat-name">Feat</div>
                             </div>
                         `+featEntries;
 
@@ -1237,8 +1237,8 @@ class EnhancementSuite {
     static _abilitiesPromptTemplate(system) {
         return `<div class="abilities-prompt">
             `+Object.entries(CONFIG.EnhancementSuite[system].abilities).reduce((t, e) => {
-                return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
-            }, '')+`
+            return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
+        }, '')+`
         </div>
         <hr />
         <div class="abilities-prompt">
