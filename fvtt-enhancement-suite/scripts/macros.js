@@ -1,8 +1,8 @@
 class SuiteHooks extends Hooks {
-
+    
     // Give hooks an initial value and some data and allow modifications to that value
     // Use case: hooking 3rd-party macro parsing extensions
-
+    
     static callAllValues(hook, initial, ...args) {
         if (!hooks.hasOwnProperty(hook)) return initial;
         console.log(`${vtt} | Called ${hook} hook`);
@@ -22,7 +22,7 @@ class SuiteDialog extends Dialog {
         if (button.callback) button.callback(html);
         this.close(html, true);
     }
-
+    
     close(html = this.element, submitted = false) {
         if (this.data.close) this.data.close(html, submitted);
         super.close();
@@ -394,7 +394,7 @@ class Macros {
             const tag = p[0];
 
             if (!this.optMemory[tag]) this.optMemory[tag] = {};
-
+            
             // Important capturing groups
             const listType = p[2] || 'list';
             const optionDelimiter = p[3] ? (p[4] || '') : ', ';
@@ -1054,9 +1054,9 @@ class MacroConfig extends Application {
                 };
 
                 for(let t = 0; t < tableEntries.length; t++) {
-                    const weight = parseInt($(tableEntries[t]).find('[name="weight"]').val());
-                    const value = $(tableEntries[t]).find('[name="value"]').val();
-                    data.table.push({ weight: isNaN(weight) ? 1 : weight, value: value });
+                     const weight = parseInt($(tableEntries[t]).find('[name="weight"]').val());
+                     const value = $(tableEntries[t]).find('[name="value"]').val();
+                     data.table.push({ weight: isNaN(weight) ? 1 : weight, value: value });
                 }
 
                 if(this.data.scope === 'actor') {
@@ -1100,8 +1100,8 @@ class MacroConfig extends Application {
                 </div>
                 <div class="macro-table-entries">
                     `+macro.table.reduce((table, entry) => {
-            return `${table} ${this._tableEntry(entry.weight, entry.value)}`;
-        }, '')+`
+                        return `${table} ${this._tableEntry(entry.weight, entry.value)}`;
+                    }, '')+`
                 </div>
                 <div>
                     <button class="add-table-entry">Add Entry</button>
@@ -1334,7 +1334,7 @@ class MacroConfig extends Application {
         if (!tabId) throw "Tab requires the 'tabId' property to identify the tab to the script.";
         if (!tabName) throw "Tab requires the 'tabName' property to identify the tab to the user.";
         if (!html) throw "Tab requires the 'html' property. This is the content of the tab.";
-
+        
         this.data.tabs.push({
             id: tabId,
             name: tabName,
@@ -1379,16 +1379,17 @@ class MacroConfig extends Application {
      * After rendering the main window, render all the child tabs
      * @private
      */
-    _postRender(html, data) {
+    async _renderInner(data) {
+        const html = await super._renderInner(data);
         this.data.tabs.forEach(tab => {
             html.find('.tabs').append(`<a class="item" data-tab="${tab.id}" style="flex: ${tab.flex};">${tab.name.replace(/ /g, '&nbsp;')}</a>`);
             html.find('.tabs').after(`<div class="tab" data-tab="${tab.id}">${tab.html}</div>`)
         });
-        super._postRender(html, data);
         new Tabs(html.find('.sheet-tabs'), {
             initial: html.find('.item').get(0).dataset.tab
         });
         this.activateListeners(html);
+        return html;
     }
 
     /* -------------------------------------------- */
@@ -1539,11 +1540,12 @@ class MacroBar extends Application {
      * After rendering the main Macro Bar container, render all the child tabs
      * @private
      */
-    _postRender(html, data) {
-        super._postRender(html, data);
+    async _renderInner(data) {
+        const html = await super._renderInner(data);
         this.macroTabs = new Tabs(html.find('.bar-tabs'), {
             initial: html.find('.item').get(0).dataset.tab
         });
+        return html;
     }
 
     /* -------------------------------------------- */

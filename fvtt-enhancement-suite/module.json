@@ -2,7 +2,7 @@
   "name": "fvtt-enhancement-suite",
   "title": "FVTT Enhancement Suite",
   "description": "This module will add additional quality of life features to enhance the Foundry Virtual Tabletop experience.",
-  "version": "0.3.7",
+  "version": "0.3.8",
   "author": "Matt DeKok (Sillvva)",
   "systems": ["dnd5e"],
   "scripts": ["./scripts/math.js", "./scripts/arrive.min.js", "./scripts/macros.js","./fvtt-enhancement-suite.js"],

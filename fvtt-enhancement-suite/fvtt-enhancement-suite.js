@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.7
+ * @version 0.3.8
  */
 
 class EnhancementSuite {
@@ -48,8 +48,7 @@ class EnhancementSuite {
         Hooks.on('renderActor5eSheet', (app, html, data) => {
             if (!data.owner) return;
 
-            const windowContent = html.parent().parent();
-            windowContent.addClass('actor-sheet');
+            const windowContent = html.closest('.actor-sheet').find('.window-content');
 
             if (this.toolbarCollapsed) {
                 windowContent.addClass('toolbar-collapsed');
@@ -1237,8 +1236,8 @@ class EnhancementSuite {
     static _abilitiesPromptTemplate(system) {
         return `<div class="abilities-prompt">
             `+Object.entries(CONFIG.EnhancementSuite[system].abilities).reduce((t, e) => {
-            return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
-        }, '')+`
+                return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
+            }, '')+`
         </div>
         <hr />
         <div class="abilities-prompt">
