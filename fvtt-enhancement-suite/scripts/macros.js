@@ -1,8 +1,8 @@
 class SuiteHooks extends Hooks {
-    
+
     // Give hooks an initial value and some data and allow modifications to that value
     // Use case: hooking 3rd-party macro parsing extensions
-    
+
     static callAllValues(hook, initial, ...args) {
         if (!hooks.hasOwnProperty(hook)) return initial;
         console.log(`${vtt} | Called ${hook} hook`);
@@ -22,7 +22,7 @@ class SuiteDialog extends Dialog {
         if (button.callback) button.callback(html);
         this.close(html, true);
     }
-    
+
     close(html = this.element, submitted = false) {
         if (this.data.close) this.data.close(html, submitted);
         super.close();
@@ -98,8 +98,10 @@ class Macros {
             this.actors = duplicate(game.actors.source);
             game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros
                 .map(macro => {
-                    if (macro.actor.id === actor.data._id) {
-                        macro.actor.name = actor.data.name;
+                    if (macro.actor) {
+                        if (macro.actor.id === actor.data._id) {
+                            macro.actor.name = actor.data.name;
+                        }
                     }
                     return macro;
                 }))
@@ -109,7 +111,13 @@ class Macros {
         Hooks.on('deleteActor', id => {
             this.actors.filter(a => a._id === id).forEach(a => {
                 if (!Object.entries(a.permission).find(kv => kv[1] === 3)) {
-                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros.filter(m => m.actor.id !== id)));
+                    game.settings.set(game.data.system.name, 'macros', JSON.stringify(this.macros.filter(m => {
+                        if (macro.actor) {
+                            return m.actor.id !== id;
+                        } else {
+                            return true;
+                        }
+                    })));
                 }
             });
             this.actors = duplicate(game.actors.source);
@@ -394,7 +402,7 @@ class Macros {
             const tag = p[0];
 
             if (!this.optMemory[tag]) this.optMemory[tag] = {};
-            
+
             // Important capturing groups
             const listType = p[2] || 'list';
             const optionDelimiter = p[3] ? (p[4] || '') : ', ';
@@ -1054,9 +1062,9 @@ class MacroConfig extends Application {
                 };
 
                 for(let t = 0; t < tableEntries.length; t++) {
-                     const weight = parseInt($(tableEntries[t]).find('[name="weight"]').val());
-                     const value = $(tableEntries[t]).find('[name="value"]').val();
-                     data.table.push({ weight: isNaN(weight) ? 1 : weight, value: value });
+                    const weight = parseInt($(tableEntries[t]).find('[name="weight"]').val());
+                    const value = $(tableEntries[t]).find('[name="value"]').val();
+                    data.table.push({ weight: isNaN(weight) ? 1 : weight, value: value });
                 }
 
                 if(this.data.scope === 'actor') {
@@ -1100,8 +1108,8 @@ class MacroConfig extends Application {
                 </div>
                 <div class="macro-table-entries">
                     `+macro.table.reduce((table, entry) => {
-                        return `${table} ${this._tableEntry(entry.weight, entry.value)}`;
-                    }, '')+`
+            return `${table} ${this._tableEntry(entry.weight, entry.value)}`;
+        }, '')+`
                 </div>
                 <div>
                     <button class="add-table-entry">Add Entry</button>
@@ -1334,7 +1342,7 @@ class MacroConfig extends Application {
         if (!tabId) throw "Tab requires the 'tabId' property to identify the tab to the script.";
         if (!tabName) throw "Tab requires the 'tabName' property to identify the tab to the user.";
         if (!html) throw "Tab requires the 'html' property. This is the content of the tab.";
-        
+
         this.data.tabs.push({
             id: tabId,
             name: tabName,
@@ -1497,7 +1505,7 @@ class MacroBar extends Application {
                 macroTabs[mai].macros.push(m);
             });
 
-        return { tabs: macroTabs, hasMacros: macroTabs.length > 0 };
+        return { tabs: macroTabs, hasMacros: macroTabs.length > 0, hasGlobal: macroTabs.find(m => m.id === 'global'), hasWorld: macroTabs.find(m => m.id === 'world')};
     }
 
     /* -------------------------------------------- */
@@ -1576,16 +1584,16 @@ class MacroBar extends Application {
             }
         });
 
-        $('#macro-bar').hide();
+        if (!(this.getData().hasGlobal || this.getData.hasWorld)) $('#macro-bar').hide();
         // When token is selected, select the corresponding actor tab in the macro bar.
         canvas.stage.on('mouseup', (ev) => {
-            if (!(ev.target instanceof Token)) { $('#macro-bar').hide(); return; }
+            // if (!(ev.target instanceof Token)) { $('#macro-bar').hide(); return; }
             if (canvas.tokens.controlledTokens.length === 1) {
                 const tab = $(`.macro-bar .item[data-tab="${canvas.tokens.controlledTokens[0].data.actorId}"]`);
                 if (tab.length === 0) { $('#macro-bar').hide(); return; }
                 this.macroTabs._activateTab(tab);
                 $('#macro-bar').show();
-            } else if (game.macros.macros.find(m => m.world || m.global)) {
+            } else if (!(this.getData().hasGlobal || this.getData.hasWorld)) {
                 $('#macro-bar').hide();
             }
         });
