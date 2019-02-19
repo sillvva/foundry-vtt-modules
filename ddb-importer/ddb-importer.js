@@ -1,6 +1,6 @@
 /**
  * @author Matt DeKok <Sillvva>
- * @version 0.1.8
+ * @version 0.1.9
  */
 
 class BeyondImporter {
@@ -95,7 +95,9 @@ class BeyondImporter {
             <ol>
                 <li>Open your character sheet (not the builder) in D&amp;D Beyond.</li>
                 <li>In your address bar, append <strong>/json</strong> to the end of the URL. It should look like this:<br /><small><em>https://www.dndbeyond.com/profile/username/characters/1234567<strong>/json</strong></em></small></li>
-                <li>Copy the data on this page into the box below.</li>
+                <li>Import the JSON from this page as a <code>.json</code> file...</li>
+                <p><input type="file" accept="application/json" class="json-import" /></p>
+                <li>...or copy the contents into the box below.</li>
                 <p><textarea class="ddb-data form-control" cols="30" rows="5" autofocus placeholder="Paste your character data here"></textarea></p>
             </ol>
         `;
@@ -110,8 +112,18 @@ class BeyondImporter {
                     icon: '',
                     label: "Import",
                     callback: (e) => {
-                        const characterData = document.querySelector('.ddb-data').value;
-                        this.importCharacterData(characterData, options);
+                        const file = document.querySelector('.json-import').files[0];
+                        if (file) {
+                            const reader = new FileReader();
+                            reader.onload = (e) => {
+                                const characterData = e.target.result;
+                                this.importCharacterData(characterData, options);
+                            };
+                            reader.readAsText(file);
+                        } else {
+                            const characterData = document.querySelector('.ddb-data').value;
+                            this.importCharacterData(characterData, options);
+                        }
                     }
                 },
                 "cancel": {

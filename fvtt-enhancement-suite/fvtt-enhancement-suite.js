@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.8
+ * @version 0.3.9
  */
 
 class EnhancementSuite {
@@ -762,9 +762,15 @@ class EnhancementSuite {
 
     sortMacros(macros) {
         const sortOrder = ['weapon', 'spell', 'ability-check', 'saving-throw', 'tool', 'custom'];
+        const scopeOrder = ['global','world','actor'];
         return macros.sort((a, b) => {
-            if (a.actor.name !== b.actor.name) {
-                return a.actor.name > b.actor.name ? 1 : -1
+            if (scopeOrder.indexOf(a.scope) !== scopeOrder.indexOf(b.scope)) {
+                return scopeOrder.indexOf(a.scope) > scopeOrder.indexOf(b.scope) ? 1 : -1;
+            }
+            if (a.actor && b.actor) {
+                if (a.actor.name !== b.actor.name) {
+                    return a.actor.name > b.actor.name ? 1 : -1
+                }
             }
             if (sortOrder.indexOf(a.type) !== sortOrder.indexOf(b.type)) {
                 return sortOrder.indexOf(a.type) > sortOrder.indexOf(b.type) ? 1 : -1;
@@ -1236,8 +1242,8 @@ class EnhancementSuite {
     static _abilitiesPromptTemplate(system) {
         return `<div class="abilities-prompt">
             `+Object.entries(CONFIG.EnhancementSuite[system].abilities).reduce((t, e) => {
-                return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
-            }, '')+`
+            return t + '<button class="'+e[0]+'">'+e[1]+'</button>';
+        }, '')+`
         </div>
         <hr />
         <div class="abilities-prompt">
