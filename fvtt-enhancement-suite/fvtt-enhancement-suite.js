@@ -1,7 +1,7 @@
 /**
  * Enhancement Suite
  * @author Matt DeKok <Sillvva>
- * @version 0.3.9
+ * @version 0.3.10
  */
 
 class EnhancementSuite {
@@ -174,6 +174,7 @@ class EnhancementSuite {
                         const weaponEntries = weapons.reduce((output, weapon) => {
                             weapon.enabled = game.macros.macros.find(macro => macro.type === 'weapon' && parseInt(macro.iid) === weapon.id);
                             let toHit = !isNaN(weapon.data.bonus.value) ? parseInt(weapon.data.bonus.value || 0) : 0;
+                            if (!actor.data.data.abilities[weapon.data.ability.value]) weapon.data.ability.value = 'STR';
                             toHit += weapon.data.proficient.value ? Math.floor((parseInt(actor.data.data.details.level.value) + 7) / 4) : 0;
                             toHit += Math.floor((parseInt(actor.data.data.abilities[weapon.data.ability.value].value) - 10) / 2);
                             weapon.data.hit = toHit;
