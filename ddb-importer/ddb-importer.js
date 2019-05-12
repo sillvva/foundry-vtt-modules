@@ -14,12 +14,12 @@ class BeyondImporter {
     /**
      * Hook into the render call for the Actor5eSheet to add an extra button
      */
-    hookActorSheet() { 
+    hookActorSheet() {
         Hooks.on('renderActorSheet5eCharacter', (app, html, data) => {
             // check existence of Enhancement Suite
             if($('.actor-sheet-toolbar').length > 0) return;
             if(!data.owner) return;
-            
+
 	    const windowHeader = html.parent().parent().find('.window-header');
             const windowCloseBtn = windowHeader.find('.close');
             const importButton = $('<a class="import-dndbeyond-sheet"><i class="fas fa-file-import"></i> Beyond Import</a>');
