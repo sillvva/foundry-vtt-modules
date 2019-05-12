@@ -14,15 +14,15 @@ class BeyondImporter {
     /**
      * Hook into the render call for the Actor5eSheet to add an extra button
      */
-    hookActorSheet() {
-        Hooks.on('renderActor5eSheet', (app, html, data) => {
+    hookActorSheet() { 
+        Hooks.on('renderActorSheet5eCharacter', (app, html, data) => {
             // check existence of Enhancement Suite
             if($('.actor-sheet-toolbar').length > 0) return;
             if(!data.owner) return;
-
-            const windowHeader = html.parent().parent().find('.window-header');
+            
+	    const windowHeader = html.parent().parent().find('.window-header');
             const windowCloseBtn = windowHeader.find('.close');
-            const importButton = $('<a class="import-dndbeyond-sheet"><span class="fas fa-file-import"></span> Beyond Import</a>');
+            const importButton = $('<a class="import-dndbeyond-sheet"><i class="fas fa-file-import"></i> Beyond Import</a>');
 
             windowHeader.find('.import-dndbeyond-sheet').remove();
             windowCloseBtn.before(importButton);
@@ -198,7 +198,7 @@ class BeyondImporter {
 
         let obj = {};
 
-        obj['img'] = this.constructor._proxyURL+character.avatarUrl;
+        obj['img'] = character.avatarUrl;
         obj['name'] = character.name;
 
         // Set Details
@@ -297,7 +297,7 @@ class BeyondImporter {
 
             charClass.classFeatures
                 .filter(feature => feature.definition.limitedUse.length > 0)
-                .filter(feature => feature.definition.limitedUse[0].uses > 1)
+                .filter(feature => feature.definition.limitedUse[0] && feature.definition.limitedUse[0].uses > 1)
                 .forEach(feature => {
                     if(resources < 2) {
                         let limitedUses = feature.definition.limitedUse;
@@ -307,9 +307,11 @@ class BeyondImporter {
                             obj['data.resources.'+resourceTypes[resources]+'.max'] = limitedUses[0].uses;
                         } else {
                             limitedUses = limitedUses.filter(lu => lu.level != null && lu.level <= charClass.level).pop();
-                            obj['data.resources.'+resourceTypes[resources]+'.label'] = feature.definition.name;
-                            obj['data.resources.'+resourceTypes[resources]+'.value'] = limitedUses.uses;
-                            obj['data.resources.'+resourceTypes[resources]+'.max'] = limitedUses.uses;
+			    if (limitedUses) {
+		              obj['data.resources.'+resourceTypes[resources]+'.label'] = feature.definition.name;
+                              obj['data.resources.'+resourceTypes[resources]+'.value'] = limitedUses.uses;
+                              obj['data.resources.'+resourceTypes[resources]+'.max'] = limitedUses.uses;
+                            }
                         }
                         resources++;
                     }
@@ -1451,8 +1453,8 @@ class BeyondImporter {
         game.packs.map(p => p.collection);
         const pack = game.packs.find(p => p.collection === "dnd5e.spells");
         const index = await pack.getIndex();
-        const entry = pack.index.find(e => e.name === name);
-        return await pack.getEntity(entry.id);
+        const entry = index.find(e => e.name === name);
+        return await entry ? pack.getEntity(entry.id) : null;
     }
 
     static getAbilityMod(score) {
