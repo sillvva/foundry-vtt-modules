@@ -45,10 +45,10 @@ class EnhancementSuite {
      * Hook into the render call for the Actor5eSheet
      */
     hookActorSheet() {
-        Hooks.on('renderActor5eSheet', (app, html, data) => {
+        Hooks.on('renderActorSheet5eCharacter', (app, html, data) => {
             if (!data.owner) return;
 
-            const windowContent = html.closest('.actor-sheet').find('.window-content');
+            const windowContent = html.closest('.actor.sheet').find('.window-content');
 
             if (this.toolbarCollapsed) {
                 windowContent.addClass('toolbar-collapsed');
