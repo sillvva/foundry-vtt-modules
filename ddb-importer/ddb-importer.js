@@ -7,7 +7,7 @@ class BeyondImporter {
 
     constructor() {
         this.hookActorSheet();
-        this.hookActorList();
+        this.hookActorDirectory();
         this.hookToolbar5eReady();
     }
 
@@ -36,10 +36,10 @@ class BeyondImporter {
     }
 
     /**
-     * Hook into the render call for the ActorList to add an extra button
+     * Hook into the render call for the ActorDirectory to add an extra button
      */
-    hookActorList() {
-        Hooks.on('renderActorList', (app, html, data) => {
+    hookActorDirectory() {
+        Hooks.on('renderActorDirectory', (app, html, data) => {
             const importButton = $('<button class="import-dndbeyond-list" style="min-width: 96%;"><i class="fas fa-file-import"></i> Beyond Import</button>');
 
             html.find('.import-dndbeyond-list').remove();
